@@ -1,27 +1,20 @@
-"use client"
-
 import { Button } from "@/components/ui/button";
-import { authClient } from "@/lib/auth-client";
-import { useRouter } from "next/navigation";
+import { requireAuth } from "@/lib/auth-utils";
+import { caller } from "@/trpc/server";
+import { LogoutButton } from "./logout";
 
-const page = () => {
-  const {data} = authClient.useSession();
-  const router = useRouter();
+const page = async () => {
+  await requireAuth();
 
+  const data = await caller.getUsers();
+  
   return (
-    <div className=" min-h-screen min-w-screen flex items-center justify-center">
-     {JSON.stringify(data)}
-     {data && (
-     <Button onClick={() => authClient.signOut({
-  fetchOptions: {
-    onSuccess: () => {
-      router.refresh();
-    }
-  }
-})}>
-  Log Out
-</Button>
-     )}
+    <div className=" min-h-screen min-w-screen flex items-center justify-center flex-col gap-y-6">
+      protected server component
+      <div>
+      {JSON.stringify(data, null, 2)}
+      </div>
+      <LogoutButton />
     </div>
   );
 };
