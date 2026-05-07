@@ -1,0 +1,35 @@
+<svg width="200" height="200" viewBox="0 0 680 680" role="img" xmlns="http://www.w3.org/2000/svg">
+  <title>NexFlow Logo</title>
+  <desc>NexFlow logo - workflow nodes connected by flowing arrows in amber</desc>
+
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="#d97706" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+
+  <!-- Node 1 - left -->
+  <rect x="120" y="300" width="80" height="80" rx="16" fill="#b45309"/>
+
+  <!-- Node 2 - center top -->
+  <rect x="300" y="180" width="80" height="80" rx="16" fill="#d97706"/>
+
+  <!-- Node 3 - center bottom -->
+  <rect x="300" y="420" width="80" height="80" rx="16" fill="#d97706"/>
+
+  <!-- Node 4 - right -->
+  <rect x="480" y="300" width="80" height="80" rx="16" fill="#f59e0b"/>
+
+  <!-- Arrow: left to center top -->
+  <line x1="200" y1="330" x2="300" y2="245" stroke="#d97706" fill="none" stroke-width="6" stroke-linecap="round" marker-end="url(#a)"/>
+
+  <!-- Arrow: left to center bottom -->
+  <line x1="200" y1="350" x2="300" y2="435" stroke="#d97706" fill="none" stroke-width="6" stroke-linecap="round" marker-end="url(#a)"/>
+
+  <!-- Arrow: center top to right -->
+  <line x1="380" y1="245" x2="480" y2="330" stroke="#d97706" fill="none" stroke-width="6" stroke-linecap="round" marker-end="url(#a)"/>
+
+  <!-- Arrow: center bottom to right -->
+  <line x1="380" y1="435" x2="480" y2="350" stroke="#d97706" fill="none" stroke-width="6" stroke-linecap="round" marker-end="url(#a)"/>
+
+</svg>
