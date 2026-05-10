@@ -2,6 +2,7 @@
 import { inngest } from '@/inngest/client';
 import { baseProcedure, createTRPCRouter, ProtectedProcedure } from '../init';
 import prisma from '@/lib/db';
+import { TRPCError } from '@trpc/server';
 
 
 export const appRouter = createTRPCRouter({
