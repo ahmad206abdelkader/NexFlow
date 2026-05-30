@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/sidebar";
 import { group } from "console";
 import { authClient } from "@/lib/auth-client";
-import { useHasActiveSubscription } from "@/features/auth/components/subscriptions/hooks/use-subscriptions";
+import { useHasActiveSubscription } from "@/features/subscriptions/hooks/use-subscriptions";
 
 const menuItems = [
   {
