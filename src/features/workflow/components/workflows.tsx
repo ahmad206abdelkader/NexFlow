@@ -5,7 +5,7 @@ import { useCreateWorkflow, useSuspenseWorkflows } from "../hooks/use-workflows"
 import { EntityContainer, EntityHeader } from "@/components/entity-components";
 import { useUpgradeModal } from "@/hooks/use-upgrade-modal";
 import { useRouter } from "next/navigation";
-
+  
 export const WorkflowsList = () => {
   const workflows = useSuspenseWorkflows();
 

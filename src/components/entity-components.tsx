@@ -77,3 +77,10 @@ export const EntityContainer = ({
     </div>
   );
 };
+
+interface EntitySearchProps {
+  value: string;
+  onChange: (value: string) => void;
+  placehoilder?: string;
+};
+
