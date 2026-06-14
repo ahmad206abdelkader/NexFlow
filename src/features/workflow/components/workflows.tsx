@@ -2,7 +2,7 @@
 
 import { boolean } from "zod";
 import { useCreateWorkflow, useSuspenseWorkflows } from "../hooks/use-workflows";
-import { EntityContainer, EntityHeader, EntitySearch } from "@/components/entity-components";
+import { EntityContainer, EntityHeader, EntityPagination, EntitySearch } from "@/components/entity-components";
 import { useUpgradeModal } from "@/hooks/use-upgrade-modal";
 import { useRouter } from "next/navigation";
 import { useWorkflowsParams } from "../hooks/use-workflows-params";
@@ -18,7 +18,7 @@ export const WorkflowsSearch = () => {
   return (
     <EntitySearch 
       value={searchValue}
-      onChange={onSearchChange}
+      onChange={onSearchChange} 
       placeholder="Search workflows"
     />
   )
@@ -66,6 +66,20 @@ export const WorkflowsHeader = ({ disabled }: { disabled?: boolean }) => {
   );
 };
 
+export const WorkflowsPagination = () => {
+  const workflows = useSuspenseWorkflows();
+  const [params, setparams] = useWorkflowsParams();
+
+  return (
+    <EntityPagination 
+     disabled= {workflows.isFetching}
+     totalPages={workflows.data.totalPages}
+     page={workflows.data.page}
+     onPageChange={(page) => setparams({ ...params, page})}
+    />
+  );
+};
+
 export const WorkflowsContainer = ({
   children,
 }: {
@@ -75,7 +89,7 @@ export const WorkflowsContainer = ({
     <EntityContainer
       header={<WorkflowsHeader />}
       search={<WorkflowsSearch />}
-      pagination={<></>}
+      pagination={<WorkflowsPagination />}
     >
       {children}
     </EntityContainer>
