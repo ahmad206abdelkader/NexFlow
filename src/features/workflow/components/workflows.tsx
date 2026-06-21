@@ -2,7 +2,7 @@
 
 import { boolean } from "zod";
 import { useCreateWorkflow, useSuspenseWorkflows } from "../hooks/use-workflows";
-import { EntityContainer, EntityHeader, EntityPagination, EntitySearch } from "@/components/entity-components";
+import { EmptyView, EntityContainer, EntityHeader, EntityList, EntityPagination, EntitySearch, ErrorView, LoadingView } from "@/components/entity-components";
 import { useUpgradeModal } from "@/hooks/use-upgrade-modal";
 import { useRouter } from "next/navigation";
 import { useWorkflowsParams } from "../hooks/use-workflows-params";
@@ -28,12 +28,13 @@ export const WorkflowsList = () => {
   const workflows = useSuspenseWorkflows();
 
   return (
-  <div className="flex-1 flex justify-center items-center">
-    <p>
-    {JSON.stringify(workflows.data, null, 2)}
-    </p>
-  </div>
-  );
+    <EntityList
+      items={workflows.data.items}
+      getKey={(workflow) => workflow.id}
+      renderItem={(workflow) => <p>{workflow.name}</p>}
+      emptyView={<WorkFlowsEmpty />}
+    />
+  )
 };
 
 export const WorkflowsHeader = ({ disabled }: { disabled?: boolean }) => {
@@ -93,5 +94,36 @@ export const WorkflowsContainer = ({
     >
       {children}
     </EntityContainer>
+  );
+};
+
+export const WorkflowsLoading = () => {
+  return <LoadingView message="Loading workflows..." />
+};
+
+export const WorkflowsError = () => {
+  return <ErrorView message="Error loading workflows" />
+};
+
+export const WorkFlowsEmpty = () => {
+  const  createWorkflow = useCreateWorkflow();
+  const { handleError, modal } = useUpgradeModal();
+
+  const handleCreate = () => {
+    createWorkflow.mutate(undefined, {
+      onError: (error) => {
+        handleError(error);
+      },
+    });
+  };
+
+  return (
+    <>
+    {modal}
+     <EmptyView 
+     onNew={handleCreate}
+      message="You haven't created any workflows yet. Get strated by cretaed your first workflow"
+     />
+    </>
   );
 };
