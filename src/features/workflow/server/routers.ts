@@ -12,21 +12,12 @@ export const workflowsRouter = createTRPCRouter({
             data: {
                 name: generateSlug(3),
                 userId: ctx.auth.user.id,
-                nodes: {
-                    createMany: {
-                        data: [
-                            {
-                                type: NodeType.INITIAL,
-                                position: { x: 0, y: 0 },
-                                name: NodeType.INITIAL,
-                            },
-                            {
-                                type: NodeType.INITIAL,
-                                position: { x: 0, y: 200 },
-                                name: NodeType.INITIAL,
-                            }
-                        ]
-                    },
+                nodes : {
+                    create: {
+                        type: NodeType.INITIAL,
+                        position: {x:0, y:0},
+                        name: NodeType.INITIAL,
+                    }
                 },
             },
         });
@@ -56,7 +47,7 @@ export const workflowsRouter = createTRPCRouter({
         }),
     getOne: ProtectedProcedure
         .input(z.object({ id: z.string() }))
-        .query(async ({ ctx, input }) => {
+        .query(async({ ctx, input }) => {
             const workflow = await prisma.workflow.findUniqueOrThrow({
                 where: { id: input.id, userId: ctx.auth.user.id },
                 include: { nodes: true, connections: true },

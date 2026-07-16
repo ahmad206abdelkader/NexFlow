@@ -2,18 +2,22 @@
 
 import type {NodeProps} from "@xyflow/react";
 import { PlusIcon } from "lucide-react";
-import { memo, useState } from "react";
+import { memo } from "react";
 import { PlaceholderNode } from "./react-flow/placeholder-node";
+import { WorkflowNode } from "./workflow-node";
 
 export const InitialNode = memo((props: NodeProps) => {
     return (
+        <WorkflowNode showToolbar={false}>
         <PlaceholderNode
           {...props}
+          onClick={() => {}}
         >
             <div className="flex items-center justify-center w-full h-full">
                 <PlusIcon className="size-5 cursor-pointer" />
             </div>
         </PlaceholderNode>
+        </WorkflowNode>
     )
 });
 
