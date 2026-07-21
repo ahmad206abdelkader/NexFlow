@@ -1,6 +1,6 @@
 import { ArrowLeftIcon } from "lucide-react";
-import Image from "next/image";
 import Link from "next/link";
+import { ThemeLogo } from "@/components/theme-logo";
 import { Button } from "@/components/ui/button";
 import {
   Empty,
@@ -24,13 +24,7 @@ export default function NotFound() {
             variant="icon"
             className="size-16 rounded-xl bg-primary/10 ring-1 ring-primary/20"
           >
-            <Image
-              src="/logos/logo.svg"
-              alt=""
-              width={40}
-              height={40}
-              priority
-            />
+            <ThemeLogo alt="" width={40} height={40} priority />
           </EmptyMedia>
 
           <p className="font-mono text-sm font-semibold tracking-widest text-primary">

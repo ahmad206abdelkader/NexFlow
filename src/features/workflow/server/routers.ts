@@ -9,6 +9,7 @@ import {
   ProtectedProcedure,
   premiumProcedure,
 } from "@/trpc/init";
+import { executeWorkflowGraph } from "./execute-workflow";
 
 export const workflowsRouter = createTRPCRouter({
   create: premiumProcedure.mutation(({ ctx }) => {
@@ -111,6 +112,16 @@ export const workflowsRouter = createTRPCRouter({
       },
     });
   }),
+  execute: ProtectedProcedure.input(z.object({ id: z.string() })).mutation(
+    async ({ ctx, input }) => {
+      const workflow = await prisma.workflow.findUniqueOrThrow({
+        where: { id: input.id, userId: ctx.auth.user.id },
+        include: { nodes: true, connections: true },
+      });
+
+      return executeWorkflowGraph(workflow);
+    },
+  ),
   getOne: ProtectedProcedure.input(z.object({ id: z.string() })).query(
     async ({ ctx, input }) => {
       const workflow = await prisma.workflow.findUniqueOrThrow({

@@ -8,9 +8,9 @@ import {
   LogOutIcon,
   StarIcon,
 } from "lucide-react";
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { ThemeLogo } from "@/components/theme-logo";
 import {
   Sidebar,
   SidebarContent,
@@ -58,12 +58,7 @@ export const AppSidebar = () => {
         <SidebarMenuItem>
           <SidebarMenuButton asChild className=" gap-4 h-10 px-4">
             <Link href="/" prefetch>
-              <Image
-                src="/logos/logo.svg"
-                alt="Nexflow"
-                width={30}
-                height={30}
-              />
+              <ThemeLogo alt="Nexflow" width={30} height={30} />
               <span className=" font-semibold text-sm">NexFlow</span>
             </Link>
           </SidebarMenuButton>

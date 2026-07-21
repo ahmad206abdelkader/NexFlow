@@ -1,9 +1,10 @@
 "use client";
 
-import { useAtomValue } from "jotai";
-import { SaveIcon } from "lucide-react";
+import type { ReactFlowInstance } from "@xyflow/react";
+import { useAtomValue, useSetAtom } from "jotai";
+import { PlayIcon, SaveIcon } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   Breadcrumb,
@@ -16,15 +17,42 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import {
+  useExecuteWorkflow,
   useSuspenseWorkflow,
   useUpdateWorkflow,
   useUpdateWorkflowName,
 } from "@/features/workflow/hooks/use-workflows";
 import { NodeType } from "@/generated/prisma";
-import { editorAtom } from "../stores/atoms";
+import { editorAtom, workflowExecutionAtom } from "../stores/atoms";
+
+const getEditorGraph = (editor: ReactFlowInstance) => {
+  const editorNodes = editor.getNodes();
+  const edges = editor.getEdges();
+
+  const hasInvalidNodeType = editorNodes.some(
+    (node) =>
+      !node.type || !Object.values(NodeType).includes(node.type as NodeType),
+  );
+
+  if (hasInvalidNodeType) {
+    toast.error("The workflow contains an unsupported node type.");
+    return null;
+  }
+
+  return {
+    nodes: editorNodes.map((node) => ({
+      id: node.id,
+      type: node.type as NodeType,
+      position: node.position,
+      data: node.data,
+    })),
+    edges,
+  };
+};
 
 export const EditorSaveButton = ({ workflowId }: { workflowId: string }) => {
   const editor = useAtomValue(editorAtom);
+  const execution = useAtomValue(workflowExecutionAtom);
   const saveWorkflow = useUpdateWorkflow();
 
   const handleSave = () => {
@@ -32,39 +60,95 @@ export const EditorSaveButton = ({ workflowId }: { workflowId: string }) => {
       return;
     }
 
-    const editorNodes = editor.getNodes();
-    const edges = editor.getEdges();
+    const graph = getEditorGraph(editor);
 
-    const hasInvalidNodeType = editorNodes.some(
-      (node) =>
-        !node.type || !Object.values(NodeType).includes(node.type as NodeType),
-    );
-
-    if (hasInvalidNodeType) {
-      toast.error("The workflow contains an unsupported node type.");
+    if (!graph) {
       return;
     }
 
-    const nodes = editorNodes.map((node) => ({
-      id: node.id,
-      type: node.type as NodeType,
-      position: node.position,
-      data: node.data,
-    }));
-
     saveWorkflow.mutate({
       id: workflowId,
-      nodes,
-      edges,
+      ...graph,
     });
   };
+
+  const executionIsRunning =
+    execution.workflowId === workflowId && execution.status === "running";
+
   return (
-    <div className="ml-auto">
-      <Button size="sm" onClick={handleSave} disabled={saveWorkflow.isPending}>
+    <div>
+      <Button
+        size="sm"
+        onClick={handleSave}
+        disabled={saveWorkflow.isPending || executionIsRunning}
+      >
         <SaveIcon className="size-4" />
         Save
       </Button>
     </div>
+  );
+};
+
+export const EditorExecuteButton = ({ workflowId }: { workflowId: string }) => {
+  const editor = useAtomValue(editorAtom);
+  const execution = useAtomValue(workflowExecutionAtom);
+  const setExecution = useSetAtom(workflowExecutionAtom);
+  const saveWorkflow = useUpdateWorkflow();
+  const executeWorkflow = useExecuteWorkflow();
+  const inFlightRef = useRef(false);
+
+  const handleExecute = useCallback(async () => {
+    if (!editor || inFlightRef.current) {
+      return;
+    }
+
+    const graph = getEditorGraph(editor);
+
+    if (!graph) {
+      return;
+    }
+
+    const triggers = graph.nodes.filter(
+      (node) => node.type === NodeType.MANUAL_TRIGGER,
+    );
+
+    if (triggers.length !== 1) {
+      toast.error("Add exactly one manual trigger before executing.");
+      return;
+    }
+
+    const triggerNodeId = triggers[0].id;
+    inFlightRef.current = true;
+    setExecution({ workflowId, triggerNodeId, status: "running" });
+
+    try {
+      await saveWorkflow.mutateAsync({ id: workflowId, ...graph });
+      const result = await executeWorkflow.mutateAsync({ id: workflowId });
+      setExecution({
+        workflowId: result.workflowId,
+        triggerNodeId: result.triggerNodeId,
+        status: "success",
+      });
+    } catch {
+      setExecution({ workflowId, triggerNodeId, status: "error" });
+    } finally {
+      inFlightRef.current = false;
+    }
+  }, [editor, executeWorkflow, saveWorkflow, setExecution, workflowId]);
+
+  const isRunning =
+    execution.workflowId === workflowId && execution.status === "running";
+
+  return (
+    <Button
+      size="sm"
+      variant="outline"
+      onClick={handleExecute}
+      disabled={isRunning}
+    >
+      <PlayIcon className="size-4" />
+      Execute workflow
+    </Button>
   );
 };
 
@@ -165,7 +249,10 @@ export const EditorHeader = ({ workflowId }: { workflowId: string }) => {
       <SidebarTrigger />
       <div className="flex flex-row items-center justify-between gap-x-4 w-full">
         <EditorBreadcrumbs workflowId={workflowId} />
-        <EditorSaveButton workflowId={workflowId} />
+        <div className="ml-auto flex items-center gap-2">
+          <EditorExecuteButton workflowId={workflowId} />
+          <EditorSaveButton workflowId={workflowId} />
+        </div>
       </div>
     </header>
   );

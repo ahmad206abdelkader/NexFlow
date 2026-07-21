@@ -3,6 +3,17 @@
 import { NodeToolbar, Position } from "@xyflow/react";
 import { SettingsIcon, TrashIcon } from "lucide-react";
 import type { ReactNode } from "react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "./ui/alert-dialog";
 import { Button } from "./ui/button";
 
 interface WorkflowNodeProps {
@@ -26,12 +37,40 @@ export function WorkflowNode({
     <>
       {showToolbar && (
         <NodeToolbar>
-          <Button size="sm" variant="ghost" onClick={onSettings}>
-            <SettingsIcon className="size-4" />
-          </Button>
-          <Button size="sm" variant="ghost" onClick={onDelete}>
-            <TrashIcon className="size-4" />
-          </Button>
+          {onSettings && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={onSettings}
+              aria-label="Configure node"
+            >
+              <SettingsIcon className="size-4" />
+            </Button>
+          )}
+          {onDelete && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button size="sm" variant="ghost" aria-label="Delete node">
+                  <TrashIcon className="size-4" />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete this node?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will also remove every connection to and from this
+                    node.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction variant="destructive" onClick={onDelete}>
+                    Delete
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
         </NodeToolbar>
       )}
       {children}

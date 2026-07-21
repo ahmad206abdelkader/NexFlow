@@ -1,0 +1,130 @@
+@property --trigger-progress-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.node {
+  --trigger-running: #2563eb;
+  --trigger-success: #16a34a;
+  --trigger-error: #ef4444;
+  isolation: isolate;
+  transition:
+    border-color 200ms ease,
+    box-shadow 200ms ease;
+}
+
+.node::after {
+  position: absolute;
+  z-index: 1;
+  inset: -3px;
+  border-radius: inherit;
+  padding: 3px;
+  pointer-events: none;
+  content: "";
+  opacity: 0;
+  transition: opacity 200ms ease;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+
+.running::after {
+  background: conic-gradient(
+    from var(--trigger-progress-angle),
+    transparent 0deg,
+    transparent 225deg,
+    color-mix(in srgb, var(--trigger-running) 35%, transparent) 260deg,
+    var(--trigger-running) 315deg,
+    transparent 360deg
+  );
+  opacity: 1;
+  animation: trigger-progress 1.25s linear infinite;
+}
+
+.success {
+  border-color: var(--trigger-success);
+}
+
+.success::after {
+  background: var(--trigger-success);
+  opacity: 1;
+}
+
+.error {
+  border-color: var(--trigger-error);
+}
+
+.error::after {
+  background: var(--trigger-error);
+  opacity: 1;
+}
+
+.statusIndicator {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  z-index: 2;
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border-radius: 9999px;
+  background: var(--card);
+  pointer-events: none;
+  opacity: 1;
+  transition:
+    color 200ms ease,
+    opacity 200ms ease,
+    transform 200ms ease;
+}
+
+.runningIndicator {
+  color: var(--trigger-running);
+}
+
+.successIndicator {
+  color: var(--trigger-success);
+}
+
+.errorIndicator {
+  color: var(--trigger-error);
+}
+
+.spinner {
+  animation: trigger-spin 700ms linear infinite;
+}
+
+@keyframes trigger-progress {
+  to {
+    --trigger-progress-angle: 360deg;
+  }
+}
+
+@keyframes trigger-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .node,
+  .node::after,
+  .statusIndicator {
+    transition: none;
+  }
+
+  .running::after {
+    background: var(--trigger-running);
+    animation: none;
+  }
+
+  .spinner {
+    animation: none;
+  }
+}

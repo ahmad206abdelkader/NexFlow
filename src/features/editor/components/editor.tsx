@@ -16,6 +16,7 @@ import {
   ReactFlow,
 } from "@xyflow/react";
 import { useSetAtom } from "jotai";
+import { useTheme } from "next-themes";
 import { useCallback, useState } from "react";
 
 import { ErrorView, LoadingView } from "@/components/entity-components";
@@ -38,6 +39,7 @@ export const EditorError = () => {
 export const Editor = ({ workflowId }: { workflowId: string }) => {
   const { data: workflow } = useSuspenseWorkflow(workflowId);
   const setEditor = useSetAtom(editorAtom);
+  const { resolvedTheme } = useTheme();
 
   const [nodes, setNodes] = useState<Node[]>(workflow.nodes);
   const [edges, setEdges] = useState<Edge[]>(workflow.edges);
@@ -68,6 +70,7 @@ export const Editor = ({ workflowId }: { workflowId: string }) => {
         onConnect={onConnect}
         onInit={setEditor}
         nodeTypes={nodeComponents}
+        colorMode={resolvedTheme === "dark" ? "dark" : "light"}
         fitView
       >
         <Background />
