@@ -1,21 +1,22 @@
 "use client";
 
-import { useState, useCallback } from "react";
 import {
-  ReactFlow,
-  applyNodeChanges,
-  applyEdgeChanges,
   addEdge,
-  type Node,
-  type Edge,
-  type NodeChange,
-  type EdgeChange,
-  type Connection,
+  applyEdgeChanges,
+  applyNodeChanges,
   Background,
+  type Connection,
   Controls,
+  type Edge,
+  type EdgeChange,
   MiniMap,
+  type Node,
+  type NodeChange,
   Panel,
+  ReactFlow,
 } from "@xyflow/react";
+import { useSetAtom } from "jotai";
+import { useCallback, useState } from "react";
 
 import { ErrorView, LoadingView } from "@/components/entity-components";
 
@@ -23,6 +24,7 @@ import { useSuspenseWorkflow } from "@/features/workflow/hooks/use-workflows";
 
 import "@xyflow/react/dist/style.css";
 import { nodeComponents } from "@/config/node-components";
+import { editorAtom } from "../stores/atoms";
 import { AddNodeButton } from "./add-node-button";
 
 export const EditorLoading = () => {
@@ -35,6 +37,7 @@ export const EditorError = () => {
 
 export const Editor = ({ workflowId }: { workflowId: string }) => {
   const { data: workflow } = useSuspenseWorkflow(workflowId);
+  const setEditor = useSetAtom(editorAtom);
 
   const [nodes, setNodes] = useState<Node[]>(workflow.nodes);
   const [edges, setEdges] = useState<Edge[]>(workflow.edges);
@@ -63,9 +66,9 @@ export const Editor = ({ workflowId }: { workflowId: string }) => {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
+        onInit={setEditor}
         nodeTypes={nodeComponents}
         fitView
-        
       >
         <Background />
         <Controls />

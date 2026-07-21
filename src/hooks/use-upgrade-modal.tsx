@@ -20,5 +20,3 @@ export const useUpgradeModal = () => {
 
   return { handleError, modal };
 };
-
-

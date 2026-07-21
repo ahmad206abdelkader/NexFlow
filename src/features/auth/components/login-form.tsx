@@ -15,7 +15,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";  
 import {
   Form,
   FormControl,
@@ -24,6 +23,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
 import { authClient } from "@/lib/auth-client";
 
 const loginSchema = z.object({
@@ -45,18 +45,21 @@ export function LoginForm() {
   });
 
   const onSubmit = async (values: LoginFormValues) => {
-    await authClient.signIn.email({
-      email: values.email,
-      password: values.password,
-      callbackURL: '/',
-    }, {
-      onSuccess: () => {
-        router.push("/");
+    await authClient.signIn.email(
+      {
+        email: values.email,
+        password: values.password,
+        callbackURL: "/",
       },
-      onError: (cxs) => {
-        toast.error(cxs.error.message);
+      {
+        onSuccess: () => {
+          router.push("/");
+        },
+        onError: (cxs) => {
+          toast.error(cxs.error.message);
+        },
       },
-    });
+    );
   };
 
   const isPending = form.formState.isSubmitting;
@@ -79,7 +82,12 @@ export function LoginForm() {
                     type="button"
                     disabled={isPending}
                   >
-                    <Image alt="Github" src="/logos/github.svg" width={20} height={20} />
+                    <Image
+                      alt="Github"
+                      src="/logos/github.svg"
+                      width={20}
+                      height={20}
+                    />
                     Continue with Github
                   </Button>
                   <Button
@@ -88,7 +96,12 @@ export function LoginForm() {
                     type="button"
                     disabled={isPending}
                   >
-                    <Image alt="Google" src="/logos/google.svg" width={20} height={20} />
+                    <Image
+                      alt="Google"
+                      src="/logos/google.svg"
+                      width={20}
+                      height={20}
+                    />
                     Continue with Google
                   </Button>
                 </div>
@@ -132,10 +145,10 @@ export function LoginForm() {
                   </Button>
                 </div>
                 <div className="text-center text-sm">
-                    Don&apos;t have an account?{""}
-                    <Link href="/signup" className="underline underline-offset-4"> 
-                      Sign up
-                    </Link>
+                  Don&apos;t have an account?{""}
+                  <Link href="/signup" className="underline underline-offset-4">
+                    Sign up
+                  </Link>
                 </div>
               </div>
             </form>

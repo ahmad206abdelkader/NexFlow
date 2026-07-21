@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+import { ErrorBoundary } from "react-error-boundary";
 import {
   Editor,
   EditorError,
@@ -7,8 +9,6 @@ import { EditorHeader } from "@/features/editor/components/editor-header";
 import { prefetchWorkflow } from "@/features/workflow/server/prefetch";
 import { requireAuth } from "@/lib/auth-utils";
 import { HydrateClient } from "@/trpc/server";
-import { Suspense } from "react";
-import { ErrorBoundary } from "react-error-boundary";
 
 interface PageProps {
   params: Promise<{
@@ -25,7 +25,7 @@ const page = async ({ params }: PageProps) => {
     <HydrateClient>
       <ErrorBoundary fallback={<EditorError />}>
         <Suspense fallback={<EditorLoading />}>
-        <EditorHeader workflowId={workflowId} />
+          <EditorHeader workflowId={workflowId} />
           <main className="felx-1">
             <Editor workflowId={workflowId} />
           </main>

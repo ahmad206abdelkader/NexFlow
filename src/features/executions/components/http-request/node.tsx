@@ -1,40 +1,36 @@
 "use client";
 
-import { Node, NodeProps } from "@xyflow/react";
-import { GlobeIcon } from  "lucide-react";
-import { memo} from "react";
-import { BaseExecutionNode } from "../base-execution-node"; 
+import type { Node, NodeProps } from "@xyflow/react";
+import { GlobeIcon } from "lucide-react";
+import { memo } from "react";
+import { BaseExecutionNode } from "../base-execution-node";
 
 type HttpRequestNodeData = {
-    endPoint?: string;
-    method?: "GET" | "POST" | "PATCH" | "DELETE" ;
-    body?: string;
-    [key: string] : unknown;
+  endpoint?: string;
+  method?: "GET" | "POST" | "PATCH" | "DELETE";
+  body?: string;
+  [key: string]: unknown;
 };
 
+type HttpRequestNodeType = Node<HttpRequestNodeData>;
 
-type HttpRerquestNodeType = Node<HttpRequestNodeData>;
+export const HttpRequestNode = memo((props: NodeProps<HttpRequestNodeType>) => {
+  const nodeData = props.data as HttpRequestNodeData;
+  const description = nodeData?.endpoint
+    ? `${nodeData.method || "GET"}: ${nodeData.endpoint}`
+    : "Not configured";
 
-export const HttpRequestNode = memo((props: NodeProps<HttpRerquestNodeType>) => {
-    const nodeData = props.data as HttpRequestNodeData;
-    const desciption = nodeData?.endPoint
-      ? `${nodeData.method || "GET"} : ${nodeData.endPoint}`
-      : "Not configured";
-
-    return (
-        <>
-          <BaseExecutionNode 
-           {...props}
-           id={props.id}
-           icon={GlobeIcon}
-           name="HTTP Request"
-           desciption={desciption}
-           onSettings={() => {}}
-           onDoubleClick={() => {}} 
-          />
-        </>
-    )
-      
+  return (
+    <BaseExecutionNode
+      {...props}
+      id={props.id}
+      icon={GlobeIcon}
+      name="HTTP Request"
+      description={description}
+      onSettings={() => {}}
+      onDoubleClick={() => {}}
+    />
+  );
 });
 
-HttpRequestNode.displayName = "HttpRequestNode" ;
+HttpRequestNode.displayName = "HttpRequestNode";

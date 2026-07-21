@@ -2,15 +2,21 @@ import {
   AlertTriangleIcon,
   Loader2Icon,
   LucidePackageOpen,
-  MoreVertical,
   MoreVerticalIcon,
   PlusIcon,
   SearchIcon,
   TrashIcon,
 } from "lucide-react";
-import { Button } from "./ui/button";
 import Link from "next/link";
-import { Input } from "./ui/input";
+import { cn } from "@/lib/utils";
+import { Button } from "./ui/button";
+import { Card, CardContent, CardDescription, CardTitle } from "./ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
 import {
   Empty,
   EmptyContent,
@@ -19,19 +25,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "./ui/empty";
-import { cn } from "@/lib/utils";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardTitle,
-} from "./ui/card"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "./ui/dropdown-menu"
+import { Input } from "./ui/input";
 
 type EntityHeaderProps = {
   title: string;
@@ -200,34 +194,23 @@ export const ErrorView = ({ message }: StateViewProps) => {
 
 interface EmpityViewProps extends StateViewProps {
   onNew?: () => void;
-};
+}
 
-export const EmptyView = ({
-  message,
-  onNew
-}: EmpityViewProps) => {
+export const EmptyView = ({ message, onNew }: EmpityViewProps) => {
   return (
     <Empty className="border border-dashed bg-white">
-       <EmptyHeader>
+      <EmptyHeader>
         <EmptyMedia variant="icon">
           <LucidePackageOpen />
         </EmptyMedia>
-       </EmptyHeader>
-       <EmptyTitle>
-        No items
-       </EmptyTitle>
-       {!!message && (
-       <EmptyDescription>
-        {message}
-       </EmptyDescription>
-       )}
-       {!!onNew && (
+      </EmptyHeader>
+      <EmptyTitle>No items</EmptyTitle>
+      {!!message && <EmptyDescription>{message}</EmptyDescription>}
+      {!!onNew && (
         <EmptyContent>
-          <Button onClick={onNew}>
-            Add item
-          </Button>
+          <Button onClick={onNew}>Add item</Button>
         </EmptyContent>
-       )}
+      )}
     </Empty>
   );
 };
@@ -238,7 +221,7 @@ interface EntityListProps<T> {
   getKey?: (item: T, index: number) => string | number;
   emptyView?: React.ReactNode;
   className?: string;
-};
+}
 
 export function EntityList<T>({
   items,
@@ -253,21 +236,18 @@ export function EntityList<T>({
         <div className="max-w-sm mx-auto">{emptyView}</div>
       </div>
     );
-  };
+  }
 
   return (
-    <div className={cn(
-      "flex flex-col gap-y-4",
-      className,
-    )}>
+    <div className={cn("flex flex-col gap-y-4", className)}>
       {items.map((item, index) => (
         <div key={getKey ? getKey(item, index) : index}>
-            {renderItem(item, index)}
+          {renderItem(item, index)}
         </div>
       ))}
     </div>
-  )
-};
+  );
+}
 
 interface EntityItemProps {
   href: string;
@@ -294,31 +274,29 @@ export const EntityItem = ({
     e.preventDefault();
     e.stopPropagation();
 
-    if(isRemoving) {
+    if (isRemoving) {
       return;
     }
 
-    if(onRemove) {
+    if (onRemove) {
       await onRemove();
     }
-  }
+  };
 
   return (
     <Link href={href} prefetch>
       <Card
-       className={cn(
-        "p-4 shadow-none hover:shadow cursor-pointer",
-        isRemoving && "opacity-50 cursor-not-allowed",
-        className,
-       )}
+        className={cn(
+          "p-4 shadow-none hover:shadow cursor-pointer",
+          isRemoving && "opacity-50 cursor-not-allowed",
+          className,
+        )}
       >
         <CardContent className="flex flex-row items-center justify-between p-0">
           <div className="flex items-center gap-3">
             {image}
             <div>
-              <CardTitle className="text-base font-medium">
-                {title}
-              </CardTitle>
+              <CardTitle className="text-base font-medium">{title}</CardTitle>
               {!!subtitle && (
                 <CardDescription className="text-xs">
                   {subtitle}
@@ -332,7 +310,7 @@ export const EntityItem = ({
               {onRemove && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button 
+                    <Button
                       size="icon"
                       variant="ghost"
                       onClick={(e) => e.stopPropagation()}
@@ -341,11 +319,11 @@ export const EntityItem = ({
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent
-                   align="end"
-                   onClick={(e) => e.stopPropagation()}
+                    align="end"
+                    onClick={(e) => e.stopPropagation()}
                   >
                     <DropdownMenuItem onClick={handleRemove}>
-                      <TrashIcon className="size-4" /> 
+                      <TrashIcon className="size-4" />
                       Delete
                     </DropdownMenuItem>
                   </DropdownMenuContent>
@@ -356,5 +334,5 @@ export const EntityItem = ({
         </CardContent>
       </Card>
     </Link>
-  )
+  );
 };

@@ -8,11 +8,9 @@ import {
   LogOutIcon,
   StarIcon,
 } from "lucide-react";
-
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-
 import {
   Sidebar,
   SidebarContent,
@@ -24,9 +22,8 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { group } from "console";
-import { authClient } from "@/lib/auth-client";
 import { useHasActiveSubscription } from "@/features/subscriptions/hooks/use-subscriptions";
+import { authClient } from "@/lib/auth-client";
 
 const menuItems = [
   {
@@ -55,7 +52,6 @@ export const AppSidebar = () => {
   const router = useRouter();
   const pathname = usePathname();
   const { hasActiveSubscription, isLoading } = useHasActiveSubscription();
-  console.log({ hasActiveSubscription, isLoading });
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
@@ -85,7 +81,7 @@ export const AppSidebar = () => {
                       isActive={
                         item.url === "/"
                           ? pathname === "/"
-                          : pathname.startsWith(item.url)
+                          : pathname?.startsWith(item.url) === true
                       }
                       asChild
                       className=" gap-x-4 h-10 px-4"
@@ -116,7 +112,7 @@ export const AppSidebar = () => {
               </SidebarMenuButton>
             </SidebarMenuItem>
           )}
-          
+
           <SidebarMenuItem>
             <SidebarMenuButton
               tooltip="Billing Portal"

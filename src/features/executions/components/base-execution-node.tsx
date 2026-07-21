@@ -1,17 +1,17 @@
 "use client";
 
-import { type NodeProps, Position } from "@xyflow/react";
+import { type NodeProps, Position, useReactFlow } from "@xyflow/react";
 import type { LucideIcon } from "lucide-react";
 import Image from "next/image";
 import { memo, type ReactNode, useCallback } from "react";
-import { BaseNode, BaseNodeContent } from "@/components/react-flow/base-node";  
-import { BaseHandle } from "@/components/base-handle"; 
-import { WorkflowNode } from "@/components/workflow-node"; 
+import { BaseHandle } from "@/components/base-handle";
+import { BaseNode, BaseNodeContent } from "@/components/react-flow/base-node";
+import { WorkflowNode } from "@/components/workflow-node";
 
 interface BaseExecutionNodeProps extends NodeProps {
   icon: LucideIcon | string;
   name: string;
-  desciption?: string;
+  description?: string;
   children?: ReactNode;
   showToolbar?: boolean;
   // status?: NodeStatus;
@@ -24,40 +24,38 @@ export const BaseExecutionNode = memo(
     id,
     icon: Icon,
     name,
-    desciption,
+    description,
     showToolbar,
     children,
     onSettings,
     onDoubleClick,
   }: BaseExecutionNodeProps) => {
-    const handleDelete = () => {};
+    const { setEdges, setNodes } = useReactFlow();
+    const handleDelete = useCallback(() => {
+      setNodes((nodes) => nodes.filter((node) => node.id !== id));
+      setEdges((edges) =>
+        edges.filter((edge) => edge.source !== id && edge.target !== id),
+      );
+    }, [id, setEdges, setNodes]);
 
     return (
       <WorkflowNode
         name={name}
-        description={desciption}
+        description={description}
         onDelete={handleDelete}
         onSettings={onSettings}
-        showToolbar
+        showToolbar={showToolbar ?? true}
       >
         <BaseNode onDoubleClick={onDoubleClick}>
           <BaseNodeContent>
             {typeof Icon === "string" ? (
-               <Image src={Icon} alt={name} width={16} height={16} /> 
-            ): (
-                <Icon className="size-4 text-muted-foreground" />
+              <Image src={Icon} alt={name} width={16} height={16} />
+            ) : (
+              <Icon className="size-4 text-muted-foreground" />
             )}
             {children}
-            <BaseHandle 
-              id="target-1"
-              type="target"
-              position={Position.Left}
-            />
-            <BaseHandle 
-              id="source-1"
-              type="source"
-              position={Position.Right}
-            />
+            <BaseHandle id="target-1" type="target" position={Position.Left} />
+            <BaseHandle id="source-1" type="source" position={Position.Right} />
           </BaseNodeContent>
         </BaseNode>
       </WorkflowNode>

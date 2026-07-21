@@ -17,7 +17,6 @@ export function BaseNode({ className, ...props }: ComponentProps<"div">) {
         "in-[.selected]:shadow-lg",
         className,
       )}
-      tabIndex={0}
       {...props}
     />
   );

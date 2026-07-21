@@ -15,7 +15,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input"; 
 import {
   Form,
   FormControl,
@@ -24,17 +23,19 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
 import { authClient } from "@/lib/auth-client";
 
-const registerSchema = z.object({
-  email: z.email("please enter a valid email address"),
-  password: z.string().min(1, "password is erquired"),
-  confirmPassword: z.string(),
-})
-.refine((data) => data.password === data.confirmPassword, {
-  message: "Password don't match",
-  path: ["confirmPassword"]
-})
+const registerSchema = z
+  .object({
+    email: z.email("please enter a valid email address"),
+    password: z.string().min(1, "password is erquired"),
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Password don't match",
+    path: ["confirmPassword"],
+  });
 
 type RegisterFormValues = z.infer<typeof registerSchema>;
 
@@ -56,17 +57,17 @@ export function RegisterForm() {
         name: values.email,
         email: values.email,
         password: values.password,
-        callbackURL: '/',
+        callbackURL: "/",
       },
       {
         onSuccess: () => {
-          router.push("/")
+          router.push("/");
         },
         onError: (ctx) => {
           toast.error(ctx.error.message);
-        }
-      }
-    )
+        },
+      },
+    );
   };
 
   const isPending = form.formState.isSubmitting;
@@ -89,7 +90,12 @@ export function RegisterForm() {
                     type="button"
                     disabled={isPending}
                   >
-                    <Image alt="Github" src="/logos/github.svg" width={20} height={20} />
+                    <Image
+                      alt="Github"
+                      src="/logos/github.svg"
+                      width={20}
+                      height={20}
+                    />
                     Continue with Github
                   </Button>
                   <Button
@@ -98,7 +104,12 @@ export function RegisterForm() {
                     type="button"
                     disabled={isPending}
                   >
-                    <Image alt="Google" src="/logos/google.svg" width={20} height={20} />
+                    <Image
+                      alt="Google"
+                      src="/logos/google.svg"
+                      width={20}
+                      height={20}
+                    />
                     Continue with Google
                   </Button>
                 </div>
@@ -159,10 +170,10 @@ export function RegisterForm() {
                   </Button>
                 </div>
                 <div className="text-center text-sm">
-                    Already have an account?{""}
-                    <Link href="/login" className="underline underline-offset-4"> 
-                      Login
-                    </Link>
+                  Already have an account?{""}
+                  <Link href="/login" className="underline underline-offset-4">
+                    Login
+                  </Link>
                 </div>
               </div>
             </form>
