@@ -18,12 +18,27 @@ import { Input } from "@/components/ui/input";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import {
   useExecuteWorkflow,
+  useLatestWorkflowExecution,
   useSuspenseWorkflow,
   useUpdateWorkflow,
   useUpdateWorkflowName,
 } from "@/features/workflow/hooks/use-workflows";
 import { NodeType } from "@/generated/prisma";
-import { editorAtom, workflowExecutionAtom } from "../stores/atoms";
+import {
+  editorAtom,
+  type WorkflowExecutionStatus,
+  workflowExecutionAtom,
+} from "../stores/atoms";
+
+const toWorkflowExecutionUiStatus = (
+  status: "PENDING" | "RUNNING" | "SUCCESS" | "FAILED",
+): WorkflowExecutionStatus => {
+  if (status === "PENDING" || status === "RUNNING") {
+    return "running";
+  }
+
+  return status === "SUCCESS" ? "success" : "error";
+};
 
 const getEditorGraph = (editor: ReactFlowInstance) => {
   const editorNodes = editor.getNodes();
@@ -95,10 +110,29 @@ export const EditorExecuteButton = ({ workflowId }: { workflowId: string }) => {
   const setExecution = useSetAtom(workflowExecutionAtom);
   const saveWorkflow = useUpdateWorkflow();
   const executeWorkflow = useExecuteWorkflow();
+  const latestExecution = useLatestWorkflowExecution(workflowId);
   const inFlightRef = useRef(false);
+  const latestExecutionIsActive =
+    latestExecution.data?.status === "PENDING" ||
+    latestExecution.data?.status === "RUNNING";
+  const executionIsActive =
+    latestExecutionIsActive ||
+    (execution.workflowId === workflowId && execution.status === "running");
+
+  useEffect(() => {
+    if (!latestExecution.data) {
+      return;
+    }
+
+    setExecution({
+      workflowId: latestExecution.data.workflowId,
+      triggerNodeId: latestExecution.data.triggerNodeId,
+      status: toWorkflowExecutionUiStatus(latestExecution.data.status),
+    });
+  }, [latestExecution.data, setExecution]);
 
   const handleExecute = useCallback(async () => {
-    if (!editor || inFlightRef.current) {
+    if (!editor || inFlightRef.current || executionIsActive) {
       return;
     }
 
@@ -117,9 +151,7 @@ export const EditorExecuteButton = ({ workflowId }: { workflowId: string }) => {
       return;
     }
 
-    const triggerNodeId = triggers[0].id;
     inFlightRef.current = true;
-    setExecution({ workflowId, triggerNodeId, status: "running" });
 
     try {
       await saveWorkflow.mutateAsync({ id: workflowId, ...graph });
@@ -127,17 +159,27 @@ export const EditorExecuteButton = ({ workflowId }: { workflowId: string }) => {
       setExecution({
         workflowId: result.workflowId,
         triggerNodeId: result.triggerNodeId,
-        status: "success",
+        status: toWorkflowExecutionUiStatus(result.status),
       });
     } catch {
-      setExecution({ workflowId, triggerNodeId, status: "error" });
+      // The mutation hooks display the save or queueing error.
     } finally {
       inFlightRef.current = false;
     }
-  }, [editor, executeWorkflow, saveWorkflow, setExecution, workflowId]);
+  }, [
+    editor,
+    executeWorkflow,
+    executionIsActive,
+    saveWorkflow,
+    setExecution,
+    workflowId,
+  ]);
 
   const isRunning =
-    execution.workflowId === workflowId && execution.status === "running";
+    latestExecution.isPending ||
+    executionIsActive ||
+    saveWorkflow.isPending ||
+    executeWorkflow.isPending;
 
   return (
     <Button

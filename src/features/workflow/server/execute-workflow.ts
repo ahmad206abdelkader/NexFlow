@@ -4,9 +4,30 @@ import { isIP } from "node:net";
 import { TRPCError } from "@trpc/server";
 import { NodeType, type Prisma } from "@/generated/prisma";
 
-type WorkflowGraph = Prisma.WorkflowGetPayload<{
-  include: { nodes: true; connections: true };
-}>;
+type WorkflowGraph = {
+  id: string;
+  nodes: Array<{
+    id: string;
+    type: NodeType;
+    data: Prisma.JsonValue;
+  }>;
+  connections: Array<{
+    fromNodeId: string;
+    toNodeId: string;
+  }>;
+};
+
+export type WorkflowNodeResult = {
+  statusCode: number;
+};
+
+type ExecuteWorkflowGraphOptions = {
+  executionId?: string;
+  executeNode?: (
+    node: WorkflowGraph["nodes"][number],
+    execute: () => Promise<WorkflowNodeResult>,
+  ) => Promise<WorkflowNodeResult>;
+};
 
 type HttpRequestData = {
   endpoint?: unknown;
@@ -101,7 +122,28 @@ const assertPublicHttpUrl = async (endpoint: string) => {
   return url;
 };
 
-const executeHttpRequest = async (nodeId: string, data: Prisma.JsonValue) => {
+export const getWorkflowExecutionErrorMessage = (error: unknown) => {
+  if (error instanceof TRPCError && error.message.trim()) {
+    return error.message.trim().slice(0, 500);
+  }
+
+  if (error instanceof Error) {
+    const message = error.message.trim();
+    const safePrefixes = ["The workflow", "Workflow node", "HTTP Request node"];
+
+    if (safePrefixes.some((prefix) => message.startsWith(prefix))) {
+      return message.slice(0, 500);
+    }
+  }
+
+  return "Workflow execution failed.";
+};
+
+const executeHttpRequest = async (
+  nodeId: string,
+  data: Prisma.JsonValue,
+  idempotencyKey?: string,
+): Promise<WorkflowNodeResult> => {
   const request = (data ?? {}) as HttpRequestData;
   const endpoint =
     typeof request.endpoint === "string" ? request.endpoint.trim() : "";
@@ -124,6 +166,15 @@ const executeHttpRequest = async (nodeId: string, data: Prisma.JsonValue) => {
   const url = await assertPublicHttpUrl(endpoint);
   const body = typeof request.body === "string" ? request.body : undefined;
   const canHaveBody = method !== "GET";
+  const headers: Record<string, string> = {};
+
+  if (canHaveBody && body) {
+    headers["content-type"] = "application/json";
+  }
+
+  if (idempotencyKey) {
+    headers["Idempotency-Key"] = idempotencyKey;
+  }
 
   let response: Response;
 
@@ -131,10 +182,7 @@ const executeHttpRequest = async (nodeId: string, data: Prisma.JsonValue) => {
     response = await fetch(url, {
       method,
       body: canHaveBody && body ? body : undefined,
-      headers:
-        canHaveBody && body
-          ? { "content-type": "application/json" }
-          : undefined,
+      headers: Object.keys(headers).length > 0 ? headers : undefined,
       redirect: "error",
     });
   } catch (error) {
@@ -151,9 +199,14 @@ const executeHttpRequest = async (nodeId: string, data: Prisma.JsonValue) => {
       message: `HTTP Request node ${nodeId} failed with status ${response.status}.`,
     });
   }
+
+  return { statusCode: response.status };
 };
 
-export const executeWorkflowGraph = async (workflow: WorkflowGraph) => {
+export const executeWorkflowGraph = async (
+  workflow: WorkflowGraph,
+  options: ExecuteWorkflowGraphOptions = {},
+) => {
   const triggers = workflow.nodes.filter(
     (node) => node.type === NodeType.MANUAL_TRIGGER,
   );
@@ -234,6 +287,8 @@ export const executeWorkflowGraph = async (workflow: WorkflowGraph) => {
   }
 
   const executedNodeIds: string[] = [];
+  const nodeResults: Array<{ nodeId: string; result: WorkflowNodeResult }> = [];
+  const executeNode = options.executeNode ?? ((_node, execute) => execute());
 
   for (const nodeId of executionOrder) {
     if (nodeId === trigger.id) {
@@ -249,13 +304,21 @@ export const executeWorkflowGraph = async (workflow: WorkflowGraph) => {
       });
     }
 
-    await executeHttpRequest(node.id, node.data);
+    const result = await executeNode(node, () =>
+      executeHttpRequest(
+        node.id,
+        node.data,
+        options.executionId ? `${options.executionId}:${node.id}` : undefined,
+      ),
+    );
     executedNodeIds.push(node.id);
+    nodeResults.push({ nodeId: node.id, result });
   }
 
   return {
     workflowId: workflow.id,
     triggerNodeId: trigger.id,
     executedNodeIds,
+    nodeResults,
   };
 };

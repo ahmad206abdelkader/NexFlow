@@ -1,15 +1,34 @@
+import { TRPCError } from "@trpc/server";
 import type { Edge, Node } from "@xyflow/react";
 import { generateSlug } from "random-word-slugs";
 import z from "zod";
 import { PAGINATION } from "@/config/constants";
-import { NodeType, type Prisma } from "@/generated/prisma";
+import {
+  NodeType,
+  type Prisma,
+  type WorkflowExecution,
+} from "@/generated/prisma";
+import { inngest, WORKFLOW_EXECUTION_REQUESTED_EVENT } from "@/inngest/client";
 import prisma from "@/lib/db";
 import {
   createTRPCRouter,
   ProtectedProcedure,
   premiumProcedure,
 } from "@/trpc/init";
-import { executeWorkflowGraph } from "./execute-workflow";
+
+const activeExecutionStatuses = ["PENDING", "RUNNING"] as const;
+
+const toExecutionResponse = (execution: {
+  id: string;
+  workflowId: string;
+  triggerNodeId: string;
+  status: "PENDING" | "RUNNING" | "SUCCESS" | "FAILED";
+}) => ({
+  executionId: execution.id,
+  workflowId: execution.workflowId,
+  triggerNodeId: execution.triggerNodeId,
+  status: execution.status,
+});
 
 export const workflowsRouter = createTRPCRouter({
   create: premiumProcedure.mutation(({ ctx }) => {
@@ -116,12 +135,113 @@ export const workflowsRouter = createTRPCRouter({
     async ({ ctx, input }) => {
       const workflow = await prisma.workflow.findUniqueOrThrow({
         where: { id: input.id, userId: ctx.auth.user.id },
-        include: { nodes: true, connections: true },
+        include: { nodes: true },
       });
 
-      return executeWorkflowGraph(workflow);
+      const triggers = workflow.nodes.filter(
+        (node) => node.type === NodeType.MANUAL_TRIGGER,
+      );
+
+      if (triggers.length !== 1) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "The workflow must contain exactly one manual trigger.",
+        });
+      }
+
+      const activeExecution = await prisma.workflowExecution.findFirst({
+        where: {
+          workflowId: workflow.id,
+          userId: ctx.auth.user.id,
+          status: { in: [...activeExecutionStatuses] },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
+      if (activeExecution) {
+        return toExecutionResponse(activeExecution);
+      }
+
+      let execution: WorkflowExecution;
+
+      try {
+        execution = await prisma.workflowExecution.create({
+          data: {
+            workflowId: workflow.id,
+            userId: ctx.auth.user.id,
+            triggerNodeId: triggers[0].id,
+            status: "PENDING",
+          },
+        });
+      } catch (error) {
+        const concurrentExecution = await prisma.workflowExecution.findFirst({
+          where: {
+            workflowId: workflow.id,
+            userId: ctx.auth.user.id,
+            status: { in: [...activeExecutionStatuses] },
+          },
+          orderBy: { createdAt: "desc" },
+        });
+
+        if (!concurrentExecution) {
+          throw error;
+        }
+
+        return toExecutionResponse(concurrentExecution);
+      }
+
+      try {
+        await inngest.send({
+          id: execution.id,
+          name: WORKFLOW_EXECUTION_REQUESTED_EVENT,
+          data: {
+            workflowId: workflow.id,
+            executionId: execution.id,
+            userId: ctx.auth.user.id,
+            triggerNodeId: triggers[0].id,
+          },
+        });
+      } catch (error) {
+        await prisma.workflowExecution.update({
+          where: { id: execution.id },
+          data: {
+            status: "FAILED",
+            error: "Workflow execution could not be queued.",
+            completedAt: new Date(),
+          },
+        });
+
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Workflow execution could not be queued.",
+          cause: error,
+        });
+      }
+
+      return toExecutionResponse(execution);
     },
   ),
+  getLatestExecution: ProtectedProcedure.input(
+    z.object({ workflowId: z.string() }),
+  ).query(({ ctx, input }) => {
+    return prisma.workflowExecution.findFirst({
+      where: {
+        workflowId: input.workflowId,
+        userId: ctx.auth.user.id,
+      },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        workflowId: true,
+        triggerNodeId: true,
+        status: true,
+        error: true,
+        startedAt: true,
+        completedAt: true,
+        createdAt: true,
+      },
+    });
+  }),
   getOne: ProtectedProcedure.input(z.object({ id: z.string() })).query(
     async ({ ctx, input }) => {
       const workflow = await prisma.workflow.findUniqueOrThrow({

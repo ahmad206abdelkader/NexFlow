@@ -3,13 +3,126 @@
 import { XIcon } from "lucide-react";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import type * as React from "react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
+type DialogVariant = "default" | "destructive";
+
+interface DialogProps
+  extends React.ComponentProps<typeof DialogPrimitive.Root> {
+  title?: React.ReactNode;
+  description?: React.ReactNode;
+  confirmLabel?: React.ReactNode;
+  cancelLabel?: React.ReactNode;
+  onConfirm?: () => void | Promise<void>;
+  isLoading?: boolean;
+  disabled?: boolean;
+  variant?: DialogVariant;
+}
+
 function Dialog({
+  open,
+  defaultOpen,
+  onOpenChange,
+  title,
+  description,
+  confirmLabel = "Confirm",
+  cancelLabel = "Cancel",
+  onConfirm,
+  isLoading = false,
+  disabled = false,
+  variant = "default",
+  children,
   ...props
-}: React.ComponentProps<typeof DialogPrimitive.Root>) {
-  return <DialogPrimitive.Root data-slot="dialog" {...props} />;
+}: DialogProps) {
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(
+    defaultOpen ?? false,
+  );
+  const [internalLoading, setInternalLoading] = useState(false);
+  const confirmationPendingRef = useRef(false);
+  const hasDeclarativeContent =
+    title !== undefined || description !== undefined || onConfirm !== undefined;
+
+  if (!hasDeclarativeContent) {
+    return (
+      <DialogPrimitive.Root
+        data-slot="dialog"
+        open={open}
+        defaultOpen={defaultOpen}
+        onOpenChange={onOpenChange}
+        {...props}
+      >
+        {children}
+      </DialogPrimitive.Root>
+    );
+  }
+
+  const loading = isLoading || internalLoading;
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (open === undefined) {
+      setUncontrolledOpen(nextOpen);
+    }
+
+    onOpenChange?.(nextOpen);
+  };
+
+  const handleConfirm = async () => {
+    if (!onConfirm || disabled || isLoading || confirmationPendingRef.current) {
+      return;
+    }
+
+    confirmationPendingRef.current = true;
+    setInternalLoading(true);
+
+    try {
+      await onConfirm();
+      handleOpenChange(false);
+    } finally {
+      confirmationPendingRef.current = false;
+      setInternalLoading(false);
+    }
+  };
+
+  return (
+    <DialogPrimitive.Root
+      data-slot="dialog"
+      open={open ?? uncontrolledOpen}
+      onOpenChange={handleOpenChange}
+      {...props}
+    >
+      <DialogContent>
+        <DialogHeader>
+          {title !== undefined && <DialogTitle>{title}</DialogTitle>}
+          {description !== undefined && (
+            <DialogDescription>{description}</DialogDescription>
+          )}
+        </DialogHeader>
+        {children}
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button type="button" variant="outline" disabled={loading}>
+              {cancelLabel}
+            </Button>
+          </DialogClose>
+          {onConfirm && (
+            <Button
+              type="button"
+              variant={variant}
+              disabled={disabled || loading}
+              aria-busy={loading}
+              onClick={handleConfirm}
+            >
+              {loading && <Spinner />}
+              {confirmLabel}
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </DialogPrimitive.Root>
+  );
 }
 
 function DialogTrigger({
@@ -155,3 +268,4 @@ export {
   DialogTitle,
   DialogTrigger,
 };
+export type { DialogProps, DialogVariant };

@@ -1,5 +1,6 @@
 import {
   useMutation,
+  useQuery,
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query";
@@ -116,15 +117,39 @@ export const useUpdateWorkflow = () => {
 
 export const useExecuteWorkflow = () => {
   const trpc = useTRPC();
+  const queryClient = useQueryClient();
 
   return useMutation(
     trpc.workflows.execute.mutationOptions({
-      onSuccess: () => {
-        toast.success("Workflow execution completed");
+      onSuccess: (data) => {
+        toast.success("Workflow execution queued");
+        queryClient.invalidateQueries(
+          trpc.workflows.getLatestExecution.queryOptions({
+            workflowId: data.workflowId,
+          }),
+        );
       },
-      onError: (error) => {
-        toast.error(`Workflow execution failed: ${error.message}`);
+      onError: (error, variables) => {
+        toast.error(`Failed to queue workflow: ${error.message}`);
+        queryClient.invalidateQueries(
+          trpc.workflows.getLatestExecution.queryOptions({
+            workflowId: variables.id,
+          }),
+        );
       },
     }),
   );
+};
+
+export const useLatestWorkflowExecution = (workflowId: string) => {
+  const trpc = useTRPC();
+
+  return useQuery({
+    ...trpc.workflows.getLatestExecution.queryOptions({ workflowId }),
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+
+      return status === "PENDING" || status === "RUNNING" ? 1000 : false;
+    },
+  });
 };

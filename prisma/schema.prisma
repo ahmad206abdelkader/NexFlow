@@ -25,6 +25,7 @@ model User {
   sessions      Session[]
   accounts      Account[]
   workflows     Workflow[]
+  executions WorkflowExecution[]
 
   
   @@map("user")
@@ -83,6 +84,7 @@ model Workflow {
 
   nodes Node[]
   connections Connection[]
+  executions WorkflowExecution[]
 
   userId String
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -128,4 +130,60 @@ model Connection {
   updatedAt DateTime @updatedAt
 
   @@unique([fromNodeId, toNodeId, fromOutput, toInput])
+}
+
+enum WorkflowExecutionStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  FAILED
+}
+
+enum NodeExecutionStatus {
+  RUNNING
+  SUCCESS
+  FAILED
+}
+
+model WorkflowExecution {
+  id String @id @default(cuid())
+
+  workflowId String
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  triggerNodeId String
+  inngestRunId  String?                 @unique
+  status        WorkflowExecutionStatus @default(PENDING)
+  error         String?
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+
+  nodeExecutions NodeExecution[]
+
+  @@index([workflowId, createdAt])
+  @@index([userId, createdAt])
+}
+
+model NodeExecution {
+  id String @id @default(cuid())
+
+  executionId String
+  execution   WorkflowExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+
+  nodeId      String
+  status      NodeExecutionStatus
+  result      Json?
+  error       String?
+  startedAt   DateTime            @default(now())
+  completedAt DateTime?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@unique([executionId, nodeId])
+  @@index([executionId, status])
 }
