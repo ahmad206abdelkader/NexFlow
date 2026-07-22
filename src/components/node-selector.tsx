@@ -14,6 +14,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { defaultNodeData, isTriggerNodeType } from "@/config/node-types";
 import { NodeType } from "@/generated/prisma";
 import { Separator } from "./ui/separator";
 
@@ -30,6 +31,12 @@ const triggerNodes: NodeTypeOption[] = [
     description:
       "Runs the flow on clicking a button. Good for getting starting quickly",
     icon: MousePointerIcon,
+  },
+  {
+    type: NodeType.googleFormsTrigger,
+    label: "Google Form",
+    description: "Runs the flow when a Google Form is submitted",
+    icon: "/logos/google-forms.svg",
   },
 ];
 
@@ -96,14 +103,12 @@ export function NodeSelector({
 
   const handleNodeSelect = useCallback(
     (selection: NodeTypeOption) => {
-      if (selection.type === NodeType.MANUAL_TRIGGER) {
+      if (isTriggerNodeType(selection.type)) {
         const nodes = getNodes();
-        const hasManualTrigger = nodes.some(
-          (node) => node.type === NodeType.MANUAL_TRIGGER,
-        );
+        const hasTrigger = nodes.some((node) => isTriggerNodeType(node.type));
 
-        if (hasManualTrigger) {
-          toast.error("Only one manual trigger is allowed per workflow");
+        if (hasTrigger) {
+          toast.error("Only one trigger is allowed per workflow");
           return;
         }
       }
@@ -123,7 +128,7 @@ export function NodeSelector({
 
         const newNode = {
           id: createId(),
-          data: {},
+          data: defaultNodeData(selection.type),
           position: flowPosition,
           type: selection.type,
         };

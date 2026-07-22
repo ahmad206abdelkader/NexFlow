@@ -34,6 +34,15 @@
   mask-composite: exclude;
 }
 
+.idle::after {
+  opacity: 0;
+}
+
+.pending::after {
+  background: color-mix(in srgb, var(--muted-foreground) 35%, transparent);
+  opacity: 1;
+}
+
 .running::after {
   background: conic-gradient(
     from var(--trigger-progress-angle),
@@ -89,11 +98,29 @@
 }
 
 .successIndicator {
+  right: 3px;
+  bottom: 3px;
+  width: 14px;
+  height: 14px;
   color: var(--trigger-success);
 }
 
+.successIndicator svg {
+  width: 12px;
+  height: 12px;
+}
+
 .errorIndicator {
+  right: 3px;
+  bottom: 3px;
+  width: 14px;
+  height: 14px;
   color: var(--trigger-error);
+}
+
+.errorIndicator svg {
+  width: 12px;
+  height: 12px;
 }
 
 .spinner {

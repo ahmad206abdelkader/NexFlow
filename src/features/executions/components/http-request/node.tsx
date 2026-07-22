@@ -1,15 +1,20 @@
 "use client";
 
 import type { Node, NodeProps } from "@xyflow/react";
+import { useAtomValue } from "jotai";
 import { GlobeIcon } from "lucide-react";
 import { memo, useCallback, useState } from "react";
+import { workflowExecutionAtom } from "@/features/editor/stores/atoms";
 import { BaseExecutionNode } from "../base-execution-node";
-import { type HttpRequestNodeData, HttpRequestSettings } from "./settings";
+import { HttpRequestSettings } from "./settings";
+import type { HttpRequestNodeData } from "./types";
 
 type HttpRequestNodeType = Node<HttpRequestNodeData>;
 
 export const HttpRequestNode = memo((props: NodeProps<HttpRequestNodeType>) => {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const execution = useAtomValue(workflowExecutionAtom);
+  const nodeExecution = execution.nodeStates[props.id];
   const nodeData = props.data as HttpRequestNodeData;
   const description = nodeData?.endpoint
     ? `${nodeData.method || "GET"}: ${nodeData.endpoint}`
@@ -24,6 +29,8 @@ export const HttpRequestNode = memo((props: NodeProps<HttpRequestNodeType>) => {
         icon={GlobeIcon}
         name="HTTP Request"
         description={description}
+        status={nodeExecution?.status ?? "IDLE"}
+        error={nodeExecution?.error?.message}
         onSettings={handleOpenSettings}
         onDoubleClick={handleOpenSettings}
       />
@@ -31,6 +38,7 @@ export const HttpRequestNode = memo((props: NodeProps<HttpRequestNodeType>) => {
         nodeId={props.id}
         data={nodeData}
         open={settingsOpen}
+        executionError={nodeExecution?.error?.message}
         onOpenChange={setSettingsOpen}
       />
     </>

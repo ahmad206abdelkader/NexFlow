@@ -15,19 +15,19 @@ datasource db {
 }
 
 model User {
-  id            String    @id 
-  email         String    @unique
-  name          String?
-  emailVerified Boolean   @default(false)
-  image         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @default(now()) @updatedAt
-  sessions      Session[]
-  accounts      Account[]
-  workflows     Workflow[]
-  executions WorkflowExecution[]
+  id                  String               @id
+  email               String               @unique
+  name                String?
+  emailVerified       Boolean              @default(false)
+  image               String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @default(now()) @updatedAt
+  sessions            Session[]
+  accounts            Account[]
+  workflows           Workflow[]
+  executions          WorkflowExecution[]
+  googleFormsWebhooks GoogleFormsWebhook[]
 
-  
   @@map("user")
 }
 
@@ -77,54 +77,57 @@ model Verification {
 }
 
 model Workflow {
-  id String @id @default(cuid())
-  name String
+  id        String   @id @default(cuid())
+  name      String
+  isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  nodes Node[]
-  connections Connection[]
-  executions WorkflowExecution[]
+  nodes               Node[]
+  connections         Connection[]
+  executions          WorkflowExecution[]
+  googleFormsWebhooks GoogleFormsWebhook[]
 
   userId String
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 enum NodeType {
   INITIAL
   MANUAL_TRIGGER
   HTTP_REQUIST
+  googleFormsTrigger
 }
 
 model Node {
-  id String @id @default(cuid())
+  id         String   @id @default(cuid())
   workflowId String
-  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
 
-  name String
-  type NodeType
+  name     String
+  type     NodeType
   position Json
-  data Json @default("{}")
+  data     Json     @default("{}")
 
   outputConnections Connection[] @relation("FromNode")
-  inputConnections Connection[] @relation("ToNode")
+  inputConnections  Connection[] @relation("ToNode")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model Connection {
-  id String @id @default(cuid())
+  id         String   @id @default(cuid())
   workflowId String
-  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
 
   fromNodeId String
-  fromNode Node @relation("FromNode", fields: [fromNodeId], references: [id], onDelete: Cascade)
-  toNodeId String
-  toNode Node @relation("ToNode", fields: [toNodeId], references: [id], onDelete: Cascade)
+  fromNode   Node   @relation("FromNode", fields: [fromNodeId], references: [id], onDelete: Cascade)
+  toNodeId   String
+  toNode     Node   @relation("ToNode", fields: [toNodeId], references: [id], onDelete: Cascade)
 
   fromOutput String @default("main")
-  toInput String @default("main")
+  toInput    String @default("main")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -140,6 +143,7 @@ enum WorkflowExecutionStatus {
 }
 
 enum NodeExecutionStatus {
+  PENDING
   RUNNING
   SUCCESS
   FAILED
@@ -165,8 +169,58 @@ model WorkflowExecution {
 
   nodeExecutions NodeExecution[]
 
+  googleFormsEventId String?                  @unique
+  googleFormsEvent   GoogleFormsWebhookEvent? @relation(fields: [googleFormsEventId], references: [id], onDelete: SetNull)
+
   @@index([workflowId, createdAt])
   @@index([userId, createdAt])
+}
+
+model GoogleFormsWebhook {
+  id         String  @id @default(cuid())
+  publicId   String  @unique
+  secretHash String
+  enabled    Boolean @default(true)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  workflowId String
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  triggerNodeId  String
+  lastReceivedAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  events GoogleFormsWebhookEvent[]
+
+  @@unique([workflowId, triggerNodeId])
+  @@index([userId, workflowId])
+}
+
+model GoogleFormsWebhookEvent {
+  id String @id @default(cuid())
+
+  webhookConfigId String
+  webhookConfig   GoogleFormsWebhook @relation(fields: [webhookConfigId], references: [id], onDelete: Cascade)
+
+  idempotencyKeyHash  String
+  payloadHash         String
+  inngestEventId      String    @unique
+  lastAttemptAt       DateTime?
+  queuedAt            DateTime?
+  processingStartedAt DateTime?
+  completedAt         DateTime?
+  failedAt            DateTime?
+  errorCode           String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  execution WorkflowExecution?
+
+  @@unique([webhookConfigId, idempotencyKeyHash])
+  @@index([webhookConfigId, createdAt])
 }
 
 model NodeExecution {

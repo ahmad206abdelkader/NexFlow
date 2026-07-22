@@ -8,6 +8,12 @@ import { BaseHandle } from "@/components/base-handle";
 import { BaseNode, BaseNodeContent } from "@/components/react-flow/base-node";
 import { WorkflowNode } from "@/components/workflow-node";
 import { useDeleteNode } from "@/features/editor/hooks/use-delete-node";
+import type { NodeExecutionStatus } from "@/features/editor/stores/atoms";
+import { cn } from "@/lib/utils";
+import {
+  executionNodeClassName,
+  NodeExecutionIndicator,
+} from "./node-execution-state";
 
 interface BaseExecutionNodeProps extends NodeProps {
   icon: LucideIcon | string;
@@ -15,7 +21,8 @@ interface BaseExecutionNodeProps extends NodeProps {
   description?: string;
   children?: ReactNode;
   showToolbar?: boolean;
-  // status?: NodeStatus;
+  status?: NodeExecutionStatus;
+  error?: string | null;
   onSettings?: () => void;
   onDoubleClick?: () => void;
 }
@@ -27,6 +34,8 @@ export const BaseExecutionNode = memo(
     name,
     description,
     showToolbar,
+    status = "IDLE",
+    error,
     children,
     onSettings,
     onDoubleClick,
@@ -41,7 +50,10 @@ export const BaseExecutionNode = memo(
         onSettings={onSettings}
         showToolbar={showToolbar ?? true}
       >
-        <BaseNode onDoubleClick={onDoubleClick}>
+        <BaseNode
+          onDoubleClick={onDoubleClick}
+          className={cn("relative group", executionNodeClassName(status))}
+        >
           <BaseNodeContent>
             {typeof Icon === "string" ? (
               <Image src={Icon} alt={name} width={16} height={16} />
@@ -52,6 +64,7 @@ export const BaseExecutionNode = memo(
             <BaseHandle id="target-1" type="target" position={Position.Left} />
             <BaseHandle id="source-1" type="source" position={Position.Right} />
           </BaseNodeContent>
+          <NodeExecutionIndicator status={status} error={error} />
         </BaseNode>
       </WorkflowNode>
     );

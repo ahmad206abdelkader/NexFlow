@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useTRPC } from "@/trpc/client";
+import { getExecutionPollingInterval } from "../lib/reconcile-execution-state";
 import { useWorkflowsParams } from "./use-workflows-params";
 
 // Hook to fetch all workflows using suspense
@@ -141,15 +142,20 @@ export const useExecuteWorkflow = () => {
   );
 };
 
-export const useLatestWorkflowExecution = (workflowId: string) => {
+export const useLatestWorkflowExecution = (
+  workflowId: string,
+  realtimeIsHealthy = false,
+  watchForExternalExecutions = false,
+) => {
   const trpc = useTRPC();
 
   return useQuery({
     ...trpc.workflows.getLatestExecution.queryOptions({ workflowId }),
-    refetchInterval: (query) => {
-      const status = query.state.data?.status;
-
-      return status === "PENDING" || status === "RUNNING" ? 1000 : false;
-    },
+    refetchInterval: (query) =>
+      getExecutionPollingInterval(
+        query.state.data?.status,
+        realtimeIsHealthy,
+        watchForExternalExecutions,
+      ),
   });
 };

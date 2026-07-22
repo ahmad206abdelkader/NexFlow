@@ -1,0 +1,1 @@
+ALTER TYPE "NodeExecutionStatus" ADD VALUE 'PENDING' BEFORE 'RUNNING';

@@ -9,17 +9,18 @@ import { BaseTriggerNode } from "../base-trigger-node";
 export const ManualTriggerNode = memo((props: NodeProps) => {
   const workflowId = useParams<{ workflowId: string }>()?.workflowId;
   const execution = useAtomValue(workflowExecutionAtom);
-  const status =
-    execution.workflowId === workflowId && execution.triggerNodeId === props.id
-      ? execution.status
-      : "idle";
+  const nodeExecution =
+    execution.workflowId === workflowId
+      ? execution.nodeStates[props.id]
+      : undefined;
 
   return (
     <BaseTriggerNode
       {...props}
       icon={MousePointerIcon}
       name="When clicking 'Execute workflow'"
-      status={status}
+      status={nodeExecution?.status ?? "IDLE"}
+      error={nodeExecution?.error?.message}
       //    onSettings={handleOpenSettings} TODO
       //    onDoubleClick={handleOpenSettings} TODO
     />

@@ -1,20 +1,27 @@
 import { TRPCError } from "@trpc/server";
 import type { Edge, Node } from "@xyflow/react";
+import { getClientSubscriptionToken } from "inngest/react";
 import { generateSlug } from "random-word-slugs";
 import z from "zod";
 import { PAGINATION } from "@/config/constants";
+import { isTriggerNodeType } from "@/config/node-types";
 import {
   NodeType,
   type Prisma,
   type WorkflowExecution,
 } from "@/generated/prisma";
-import { inngest, WORKFLOW_EXECUTION_REQUESTED_EVENT } from "@/inngest/client";
+import { inngest, workflowExecutionRequestedEvent } from "@/inngest/client";
+import {
+  workflowExecutionChannel,
+  workflowExecutionTopics,
+} from "@/inngest/realtime";
 import prisma from "@/lib/db";
 import {
   createTRPCRouter,
   ProtectedProcedure,
   premiumProcedure,
 } from "@/trpc/init";
+import { authorizeRealtimeExecution } from "./realtime-authorization";
 
 const activeExecutionStatuses = ["PENDING", "RUNNING"] as const;
 
@@ -79,6 +86,22 @@ export const workflowsRouter = createTRPCRouter({
   ).mutation(async ({ ctx, input }) => {
     const { id, nodes, edges } = input;
 
+    const triggerNodes = nodes.filter((node) => isTriggerNodeType(node.type));
+    if (triggerNodes.length > 1) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "A workflow can contain only one trigger.",
+      });
+    }
+
+    const triggerNodeId = triggerNodes[0]?.id;
+    if (triggerNodeId && edges.some((edge) => edge.target === triggerNodeId)) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "A trigger must be the first node in a workflow.",
+      });
+    }
+
     await prisma.workflow.findUniqueOrThrow({
       where: { id, userId: ctx.auth.user.id },
     });
@@ -112,6 +135,20 @@ export const workflowsRouter = createTRPCRouter({
         })),
       });
 
+      const googleFormsTriggerNodeIds = nodes
+        .filter((node) => node.type === NodeType.googleFormsTrigger)
+        .map((node) => node.id);
+
+      await tx.googleFormsWebhook.updateMany({
+        where: {
+          workflowId: id,
+          userId: ctx.auth.user.id,
+          enabled: true,
+          triggerNodeId: { notIn: googleFormsTriggerNodeIds },
+        },
+        data: { enabled: false },
+      });
+
       return tx.workflow.update({
         where: { id },
         data: { updatedAt: new Date() },
@@ -137,6 +174,13 @@ export const workflowsRouter = createTRPCRouter({
         where: { id: input.id, userId: ctx.auth.user.id },
         include: { nodes: true },
       });
+
+      if (!workflow.isActive) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "The workflow is inactive.",
+        });
+      }
 
       const triggers = workflow.nodes.filter(
         (node) => node.type === NodeType.MANUAL_TRIGGER,
@@ -191,16 +235,17 @@ export const workflowsRouter = createTRPCRouter({
       }
 
       try {
-        await inngest.send({
-          id: execution.id,
-          name: WORKFLOW_EXECUTION_REQUESTED_EVENT,
-          data: {
-            workflowId: workflow.id,
-            executionId: execution.id,
-            userId: ctx.auth.user.id,
-            triggerNodeId: triggers[0].id,
-          },
-        });
+        await inngest.send(
+          workflowExecutionRequestedEvent.create(
+            {
+              workflowId: workflow.id,
+              executionId: execution.id,
+              userId: ctx.auth.user.id,
+              triggerNodeId: triggers[0].id,
+            },
+            { id: execution.id },
+          ),
+        );
       } catch (error) {
         await prisma.workflowExecution.update({
           where: { id: execution.id },
@@ -239,7 +284,32 @@ export const workflowsRouter = createTRPCRouter({
         startedAt: true,
         completedAt: true,
         createdAt: true,
+        updatedAt: true,
+        nodeExecutions: {
+          select: {
+            nodeId: true,
+            status: true,
+            result: true,
+            error: true,
+            startedAt: true,
+            completedAt: true,
+            updatedAt: true,
+          },
+        },
       },
+    });
+  }),
+  getRealtimeToken: ProtectedProcedure.input(
+    z.object({ executionId: z.string() }),
+  ).query(async ({ ctx, input }) => {
+    const execution = await authorizeRealtimeExecution({
+      executionId: input.executionId,
+      userId: ctx.auth.user.id,
+    });
+
+    return getClientSubscriptionToken(inngest, {
+      channel: workflowExecutionChannel({ executionId: execution.id }),
+      topics: [...workflowExecutionTopics],
     });
   }),
   getOne: ProtectedProcedure.input(z.object({ id: z.string() })).query(

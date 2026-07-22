@@ -1,13 +1,23 @@
-import type { LookupAddress } from "node:dns";
-import { lookup } from "node:dns/promises";
-import { isIP } from "node:net";
 import { TRPCError } from "@trpc/server";
-import { NodeType, type Prisma } from "@/generated/prisma";
+import { isTriggerNodeType } from "@/config/node-types";
+import type { GoogleFormsWebhookPayload } from "@/features/triggers/google-forms/schema";
+import type { NodeType, Prisma } from "@/generated/prisma";
+import {
+  type NodeExecutorContext,
+  type NodeExecutorResult,
+  workflowExecutorRegistry,
+} from "./executor-registry";
+import {
+  TemplateResolutionError,
+  type TemplateVariableDefinition,
+} from "./resolve-workflow-variables";
+import { topologicallySortWorkflowNodes } from "./topological-sort";
 
 type WorkflowGraph = {
   id: string;
   nodes: Array<{
     id: string;
+    name?: string;
     type: NodeType;
     data: Prisma.JsonValue;
   }>;
@@ -17,119 +27,95 @@ type WorkflowGraph = {
   }>;
 };
 
-export type WorkflowNodeResult = {
-  statusCode: number;
-};
+export type WorkflowNodeResult = NodeExecutorResult;
+
+export type WorkflowNodeExecutionContext = Pick<
+  NodeExecutorContext,
+  "upstreamResults"
+>;
 
 type ExecuteWorkflowGraphOptions = {
   executionId?: string;
-  executeNode?: (
+  triggerNodeId?: string;
+  triggerInput?: GoogleFormsWebhookPayload;
+  executeTrigger?: (
     node: WorkflowGraph["nodes"][number],
     execute: () => Promise<WorkflowNodeResult>,
   ) => Promise<WorkflowNodeResult>;
+  executeNode?: (
+    node: WorkflowGraph["nodes"][number],
+    execute: () => Promise<WorkflowNodeResult>,
+    context: WorkflowNodeExecutionContext,
+  ) => Promise<WorkflowNodeResult>;
 };
 
-type HttpRequestData = {
-  endpoint?: unknown;
-  method?: unknown;
-  body?: unknown;
-};
-
-const HTTP_METHODS = new Set(["GET", "POST", "PATCH", "DELETE"]);
-
-const isPrivateIpv4 = (address: string) => {
-  const [first, second] = address.split(".").map(Number);
-
-  return (
-    first === 0 ||
-    first === 10 ||
-    first === 127 ||
-    (first === 100 && second >= 64 && second <= 127) ||
-    (first === 169 && second === 254) ||
-    (first === 172 && second >= 16 && second <= 31) ||
-    (first === 192 && second === 0) ||
-    (first === 192 && second === 168) ||
-    (first === 198 && (second === 18 || second === 19)) ||
-    first >= 224
+export const createWorkflowExecutionPlan = (
+  workflow: WorkflowGraph,
+  expectedTriggerNodeId?: string,
+) => {
+  const triggers = workflow.nodes.filter((node) =>
+    isTriggerNodeType(node.type),
   );
-};
 
-const isPrivateIpv6 = (address: string) => {
-  const normalized = address.toLowerCase();
-
-  if (normalized.startsWith("::ffff:")) {
-    const mappedIpv4 = normalized.slice("::ffff:".length);
-    return isIP(mappedIpv4) === 4 && isPrivateIpv4(mappedIpv4);
-  }
-
-  return (
-    normalized === "::" ||
-    normalized === "::1" ||
-    normalized.startsWith("fc") ||
-    normalized.startsWith("fd") ||
-    /^fe[89ab]/.test(normalized) ||
-    normalized.startsWith("ff")
-  );
-};
-
-const assertPublicHttpUrl = async (endpoint: string) => {
-  let url: URL;
-
-  try {
-    url = new URL(endpoint);
-  } catch {
+  if (triggers.length === 0) {
     throw new TRPCError({
       code: "BAD_REQUEST",
-      message: "HTTP Request node has an invalid URL.",
+      message: "Workflow must contain a trigger.",
+    });
+  }
+
+  if (triggers.length > 1) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Workflow must contain only one trigger.",
+    });
+  }
+
+  const trigger = triggers[0];
+
+  if (expectedTriggerNodeId && trigger.id !== expectedTriggerNodeId) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Workflow trigger node does not match the requested trigger.",
     });
   }
 
   if (
-    !["http:", "https:"].includes(url.protocol) ||
-    url.username ||
-    url.password ||
-    url.hostname === "localhost" ||
-    url.hostname.endsWith(".localhost")
+    workflow.connections.some(
+      (connection) => connection.toNodeId === trigger.id,
+    )
   ) {
     throw new TRPCError({
       code: "BAD_REQUEST",
-      message: "HTTP Request URLs must use a public HTTP or HTTPS address.",
+      message: "A trigger must be the first node in a workflow.",
     });
   }
-
-  let addresses: LookupAddress[];
-
-  try {
-    addresses = await lookup(url.hostname, { all: true, verbatim: true });
-  } catch {
-    throw new TRPCError({
-      code: "BAD_REQUEST",
-      message: "The HTTP Request hostname could not be resolved.",
-    });
-  }
-
-  const hasUnsafeAddress = addresses.some(({ address, family }) =>
-    family === 4 ? isPrivateIpv4(address) : isPrivateIpv6(address),
+  const executionPlan = topologicallySortWorkflowNodes(
+    workflow.nodes,
+    workflow.connections,
+    trigger.id,
   );
 
-  if (addresses.length === 0 || hasUnsafeAddress) {
-    throw new TRPCError({
-      code: "BAD_REQUEST",
-      message: "HTTP Request URLs cannot target private network addresses.",
-    });
-  }
-
-  return url;
+  return { trigger, executionPlan };
 };
 
 export const getWorkflowExecutionErrorMessage = (error: unknown) => {
+  if (error instanceof TemplateResolutionError) {
+    return error.message.trim().slice(0, 500);
+  }
+
   if (error instanceof TRPCError && error.message.trim()) {
     return error.message.trim().slice(0, 500);
   }
 
   if (error instanceof Error) {
     const message = error.message.trim();
-    const safePrefixes = ["The workflow", "Workflow node", "HTTP Request node"];
+    const safePrefixes = [
+      "The workflow",
+      "Workflow ",
+      "HTTP Request node",
+      "Google Forms trigger",
+    ];
 
     if (safePrefixes.some((prefix) => message.startsWith(prefix))) {
       return message.slice(0, 500);
@@ -139,178 +125,149 @@ export const getWorkflowExecutionErrorMessage = (error: unknown) => {
   return "Workflow execution failed.";
 };
 
-const executeHttpRequest = async (
-  nodeId: string,
-  data: Prisma.JsonValue,
-  idempotencyKey?: string,
-): Promise<WorkflowNodeResult> => {
-  const request = (data ?? {}) as HttpRequestData;
-  const endpoint =
-    typeof request.endpoint === "string" ? request.endpoint.trim() : "";
-  const method = typeof request.method === "string" ? request.method : "GET";
-
-  if (!endpoint) {
-    throw new TRPCError({
-      code: "BAD_REQUEST",
-      message: `HTTP Request node ${nodeId} needs a URL before execution.`,
-    });
-  }
-
-  if (!HTTP_METHODS.has(method)) {
-    throw new TRPCError({
-      code: "BAD_REQUEST",
-      message: `HTTP Request node ${nodeId} uses an unsupported method.`,
-    });
-  }
-
-  const url = await assertPublicHttpUrl(endpoint);
-  const body = typeof request.body === "string" ? request.body : undefined;
-  const canHaveBody = method !== "GET";
-  const headers: Record<string, string> = {};
-
-  if (canHaveBody && body) {
-    headers["content-type"] = "application/json";
-  }
-
-  if (idempotencyKey) {
-    headers["Idempotency-Key"] = idempotencyKey;
-  }
-
-  let response: Response;
-
-  try {
-    response = await fetch(url, {
-      method,
-      body: canHaveBody && body ? body : undefined,
-      headers: Object.keys(headers).length > 0 ? headers : undefined,
-      redirect: "error",
-    });
-  } catch (error) {
-    throw new TRPCError({
-      code: "BAD_REQUEST",
-      message: `HTTP Request node ${nodeId} could not complete.`,
-      cause: error,
-    });
-  }
-
-  if (!response.ok) {
-    throw new TRPCError({
-      code: "BAD_REQUEST",
-      message: `HTTP Request node ${nodeId} failed with status ${response.status}.`,
-    });
-  }
-
-  return { statusCode: response.status };
-};
-
 export const executeWorkflowGraph = async (
   workflow: WorkflowGraph,
   options: ExecuteWorkflowGraphOptions = {},
 ) => {
-  const triggers = workflow.nodes.filter(
-    (node) => node.type === NodeType.MANUAL_TRIGGER,
+  const { trigger, executionPlan } = createWorkflowExecutionPlan(
+    workflow,
+    options.triggerNodeId,
   );
-
-  if (triggers.length !== 1) {
-    throw new TRPCError({
-      code: "BAD_REQUEST",
-      message: "The workflow must contain exactly one manual trigger.",
-    });
-  }
-
-  const trigger = triggers[0];
-  const nodesById = new Map(workflow.nodes.map((node) => [node.id, node]));
-  const outgoing = new Map<string, string[]>();
-
-  for (const connection of workflow.connections) {
-    const targets = outgoing.get(connection.fromNodeId) ?? [];
-    targets.push(connection.toNodeId);
-    outgoing.set(connection.fromNodeId, targets);
-  }
-
-  const reachableNodeIds = new Set([trigger.id]);
-  const reachableQueue = [trigger.id];
-
-  for (let index = 0; index < reachableQueue.length; index += 1) {
-    const nodeId = reachableQueue[index];
-
-    for (const targetId of outgoing.get(nodeId) ?? []) {
-      if (!reachableNodeIds.has(targetId)) {
-        reachableNodeIds.add(targetId);
-        reachableQueue.push(targetId);
-      }
-    }
-  }
-
-  const indegree = new Map([...reachableNodeIds].map((nodeId) => [nodeId, 0]));
-
-  for (const connection of workflow.connections) {
-    if (
-      reachableNodeIds.has(connection.fromNodeId) &&
-      reachableNodeIds.has(connection.toNodeId)
-    ) {
-      indegree.set(
-        connection.toNodeId,
-        (indegree.get(connection.toNodeId) ?? 0) + 1,
-      );
-    }
-  }
-
-  const ready = [...indegree]
-    .filter(([, count]) => count === 0)
-    .map(([nodeId]) => nodeId);
-  const executionOrder: string[] = [];
-
-  for (let index = 0; index < ready.length; index += 1) {
-    const nodeId = ready[index];
-    executionOrder.push(nodeId);
-
-    for (const targetId of outgoing.get(nodeId) ?? []) {
-      if (!reachableNodeIds.has(targetId)) {
-        continue;
-      }
-
-      const nextIndegree = (indegree.get(targetId) ?? 0) - 1;
-      indegree.set(targetId, nextIndegree);
-
-      if (nextIndegree === 0) {
-        ready.push(targetId);
-      }
-    }
-  }
-
-  if (executionOrder.length !== reachableNodeIds.size) {
-    throw new TRPCError({
-      code: "BAD_REQUEST",
-      message: "The workflow contains a cycle and cannot be executed.",
-    });
-  }
 
   const executedNodeIds: string[] = [];
   const nodeResults: Array<{ nodeId: string; result: WorkflowNodeResult }> = [];
+  const resultsByNodeId = new Map<string, WorkflowNodeResult>();
+  const nodesById = new Map(workflow.nodes.map((node) => [node.id, node]));
+  const executionIndexByNodeId = new Map(
+    executionPlan.orderedNodes.map((node, index) => [node.id, index]),
+  );
+  const ancestorIdsByNodeId = new Map<string, Set<string>>();
+  const variableDefinitions: TemplateVariableDefinition[] = workflow.nodes.map(
+    (node) => {
+      const nodeData =
+        typeof node.data === "object" &&
+        node.data !== null &&
+        !Array.isArray(node.data)
+          ? node.data
+          : null;
+
+      return {
+        nodeId: node.id,
+        nodeName: node.name ?? node.type,
+        variableName:
+          typeof nodeData?.variableName === "string"
+            ? nodeData.variableName
+            : undefined,
+      };
+    },
+  );
   const executeNode = options.executeNode ?? ((_node, execute) => execute());
 
-  for (const nodeId of executionOrder) {
-    if (nodeId === trigger.id) {
+  const triggerExecutor = workflowExecutorRegistry.resolve(trigger.type);
+  const runTrigger = () =>
+    triggerExecutor({
+      node: trigger,
+      executionId: options.executionId,
+      upstreamResults: [],
+      variableDefinitions,
+      triggerInput: options.triggerInput,
+    });
+  const triggerResult = options.executeTrigger
+    ? await options.executeTrigger(trigger, runTrigger)
+    : await runTrigger();
+  resultsByNodeId.set(trigger.id, triggerResult);
+
+  const getAncestorIds = (nodeId: string): Set<string> => {
+    const cached = ancestorIdsByNodeId.get(nodeId);
+    if (cached) {
+      return cached;
+    }
+
+    const ancestors = new Set<string>();
+    ancestorIdsByNodeId.set(nodeId, ancestors);
+
+    for (const dependencyId of executionPlan.dependenciesByNodeId.get(nodeId) ??
+      []) {
+      ancestors.add(dependencyId);
+
+      for (const ancestorId of getAncestorIds(dependencyId)) {
+        ancestors.add(ancestorId);
+      }
+    }
+
+    return ancestors;
+  };
+
+  for (const node of executionPlan.orderedNodes) {
+    if (node.id === trigger.id) {
       continue;
     }
 
-    const node = nodesById.get(nodeId);
+    const executor = workflowExecutorRegistry.resolve(node.type);
 
-    if (!node || node.type !== NodeType.HTTP_REQUIST) {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: `Workflow node ${nodeId} is not executable.`,
+    const upstreamResults = [...getAncestorIds(node.id)]
+      .filter((ancestorId) => {
+        if (ancestorId !== trigger.id) {
+          return true;
+        }
+
+        const triggerData =
+          typeof trigger.data === "object" &&
+          trigger.data !== null &&
+          !Array.isArray(trigger.data)
+            ? trigger.data
+            : null;
+
+        return (
+          typeof triggerData?.variableName === "string" &&
+          triggerData.variableName.trim().length > 0
+        );
+      })
+      .sort(
+        (left, right) =>
+          (executionIndexByNodeId.get(left) ?? 0) -
+          (executionIndexByNodeId.get(right) ?? 0),
+      )
+      .map((dependencyId) => {
+        const result = resultsByNodeId.get(dependencyId);
+
+        if (!result) {
+          throw new Error(
+            `Workflow node ${node.id} cannot run before dependency ${dependencyId} succeeds.`,
+          );
+        }
+
+        const dependency = nodesById.get(dependencyId);
+        const dependencyData =
+          typeof dependency?.data === "object" &&
+          dependency.data !== null &&
+          !Array.isArray(dependency.data)
+            ? dependency.data
+            : null;
+        const variableName =
+          typeof dependencyData?.variableName === "string"
+            ? dependencyData.variableName
+            : undefined;
+
+        return {
+          nodeId: dependencyId,
+          nodeName: dependency?.name ?? dependency?.type,
+          variableName,
+          result,
+        };
       });
-    }
-
-    const result = await executeNode(node, () =>
-      executeHttpRequest(
-        node.id,
-        node.data,
-        options.executionId ? `${options.executionId}:${node.id}` : undefined,
-      ),
+    const result = await executeNode(
+      node,
+      () =>
+        executor({
+          node,
+          executionId: options.executionId,
+          upstreamResults,
+          variableDefinitions,
+        }),
+      { upstreamResults },
     );
+    resultsByNodeId.set(node.id, result);
     executedNodeIds.push(node.id);
     nodeResults.push({ nodeId: node.id, result });
   }
