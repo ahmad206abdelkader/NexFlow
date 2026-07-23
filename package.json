@@ -4,12 +4,13 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
+    "dev:public": "node scripts/dev-public.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "biome check",
     "format": "biome format --write",
     "inngest:dev": "inngest-cli dev",
-    "dev:all": "mprocs"
+    "dev:all": "node scripts/dev-public.mjs --all"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^2.0.0",

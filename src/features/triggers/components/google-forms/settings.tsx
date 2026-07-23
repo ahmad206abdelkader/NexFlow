@@ -2,7 +2,12 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useReactFlow } from "@xyflow/react";
-import { CheckIcon, ClipboardIcon, RefreshCwIcon } from "lucide-react";
+import {
+  AlertTriangleIcon,
+  CheckIcon,
+  ClipboardIcon,
+  RefreshCwIcon,
+} from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -64,12 +69,21 @@ const FieldHelper = ({ children }: { children: ReactNode }) => (
   <p className="text-xs leading-5 text-muted-foreground">{children}</p>
 );
 
-const CopyButton = ({ value, label }: { value: string; label: string }) => {
+const CopyButton = ({
+  value,
+  label,
+  onCopied,
+}: {
+  value: string;
+  label: string;
+  onCopied?: () => void;
+}) => {
   const [copied, setCopied] = useState(false);
 
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(value);
+      onCopied?.();
       setCopied(true);
       toast.success(`${label} copied`);
       window.setTimeout(() => setCopied(false), 1_500);
@@ -88,6 +102,28 @@ const CopyButton = ({ value, label }: { value: string; label: string }) => {
       {copied ? "Copied" : `Copy ${label}`}
     </Button>
   );
+};
+
+export const googleFormsScriptUrlStorageKey = (webhookId: string) =>
+  `nexflow:google-forms:last-copied-script-url:${webhookId}`;
+
+const getWebhookUrlKind = (webhookUrl: string) => {
+  try {
+    const hostname = new URL(webhookUrl).hostname.toLowerCase();
+
+    if (["localhost", "127.0.0.1", "::1", "[::1]"].includes(hostname)) {
+      return "localhost" as const;
+    }
+
+    if (hostname.endsWith(".trycloudflare.com")) {
+      return "cloudflareQuickTunnel" as const;
+    }
+  } catch {
+    // The server validates generated webhook URLs. Avoid breaking the dialog
+    // if a stale client response is malformed.
+  }
+
+  return "other" as const;
 };
 
 interface GoogleFormsTriggerSettingsProps {
@@ -116,6 +152,9 @@ export const GoogleFormsTriggerSettings = ({
   const [configuration, setConfiguration] =
     useState<PublicConfiguration | null>(null);
   const [oneTimeSecret, setOneTimeSecret] = useState<string | null>(null);
+  const [lastCopiedScriptUrl, setLastCopiedScriptUrl] = useState<string | null>(
+    null,
+  );
   const identity = { workflowId: workflowId ?? "", triggerNodeId: nodeId };
   const configurationQuery = useQuery({
     ...trpc.googleFormsWebhooks.get.queryOptions(identity),
@@ -142,6 +181,23 @@ export const GoogleFormsTriggerSettings = ({
       setConfiguration(configurationQuery.data);
     }
   }, [configurationQuery.data]);
+
+  useEffect(() => {
+    if (!open || !configuration) {
+      setLastCopiedScriptUrl(null);
+      return;
+    }
+
+    try {
+      setLastCopiedScriptUrl(
+        window.localStorage.getItem(
+          googleFormsScriptUrlStorageKey(configuration.webhookId),
+        ),
+      );
+    } catch {
+      setLastCopiedScriptUrl(null);
+    }
+  }, [configuration, open]);
 
   const ensureWebhook = useMutation(
     trpc.googleFormsWebhooks.ensure.mutationOptions({
@@ -187,6 +243,30 @@ export const GoogleFormsTriggerSettings = ({
         : "Generate the webhook after saving this node to create the Apps Script.",
     [configuration, oneTimeSecret],
   );
+  const webhookUrlKind = configuration
+    ? getWebhookUrlKind(configuration.webhookUrl)
+    : "other";
+  const copiedScriptUrlChanged = Boolean(
+    configuration &&
+      lastCopiedScriptUrl &&
+      lastCopiedScriptUrl !== configuration.webhookUrl,
+  );
+
+  const rememberCopiedScriptUrl = () => {
+    if (!configuration) {
+      return;
+    }
+
+    setLastCopiedScriptUrl(configuration.webhookUrl);
+    try {
+      window.localStorage.setItem(
+        googleFormsScriptUrlStorageKey(configuration.webhookId),
+        configuration.webhookUrl,
+      );
+    } catch {
+      // Copying the script still succeeds when browser storage is unavailable.
+    }
+  };
 
   const handleSave = () => {
     const parsed = googleFormsTriggerNodeDataSchema.safeParse(draft);
@@ -305,6 +385,54 @@ export const GoogleFormsTriggerSettings = ({
                   <CopyButton value={configuration.webhookUrl} label="URL" />
                 </div>
 
+                {webhookUrlKind === "localhost" && (
+                  <div
+                    role="alert"
+                    className="flex gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                  >
+                    <AlertTriangleIcon className="mt-0.5 size-4 shrink-0" />
+                    <p>
+                      This localhost webhook cannot receive Google Forms
+                      submissions. Start <code>npm run dev:public</code>, reopen
+                      this dialog, and update <code>WEBHOOK_URL</code> in Apps
+                      Script. Do not regenerate the secret.
+                    </p>
+                  </div>
+                )}
+
+                {copiedScriptUrlChanged && (
+                  <div
+                    role="alert"
+                    className="flex gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm"
+                  >
+                    <AlertTriangleIcon className="mt-0.5 size-4 shrink-0 text-amber-700 dark:text-amber-300" />
+                    <p>
+                      The public URL changed since this browser last copied the
+                      Apps Script. The previous script used{" "}
+                      {lastCopiedScriptUrl}. Replace its{" "}
+                      <code>WEBHOOK_URL</code> with the current URL. The webhook
+                      secret does not need to be regenerated.
+                    </p>
+                  </div>
+                )}
+
+                {webhookUrlKind === "cloudflareQuickTunnel" &&
+                  !copiedScriptUrlChanged && (
+                    <div
+                      role="alert"
+                      className="flex gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm"
+                    >
+                      <AlertTriangleIcon className="mt-0.5 size-4 shrink-0 text-amber-700 dark:text-amber-300" />
+                      <p>
+                        Cloudflare Quick Tunnel URLs are temporary. If this URL
+                        changes after restarting <code>npm run dev:all</code>,
+                        update <code>WEBHOOK_URL</code> in the installed Apps
+                        Script. Do not regenerate the secret just because the
+                        URL changed.
+                      </p>
+                    </div>
+                  )}
+
                 <div className="flex flex-col gap-2">
                   <Label htmlFor={`${nodeId}-webhook-secret`}>
                     Webhook Secret
@@ -376,7 +504,11 @@ export const GoogleFormsTriggerSettings = ({
             <pre className="max-h-96 overflow-auto rounded-md bg-muted p-4 text-xs whitespace-pre-wrap">
               <code>{script}</code>
             </pre>
-            <CopyButton value={script} label="Script" />
+            <CopyButton
+              value={script}
+              label="Script"
+              onCopied={rememberCopiedScriptUrl}
+            />
           </section>
 
           <section className="flex flex-col gap-3 border-t pt-5">

@@ -14,7 +14,7 @@ const webhookIdentitySchema = z.object({
   triggerNodeId: z.string().min(1),
 });
 
-const getPublicApplicationUrl = () => {
+export const getPublicApplicationUrl = () => {
   const configuredUrl =
     process.env.BETTER_AUTH_URL ??
     (process.env.VERCEL_URL
