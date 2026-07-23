@@ -39,6 +39,43 @@ interface HttpRequestSettingsProps {
   executionError?: string | null;
 }
 
+const VARIABLE_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const TEMPLATE_EXPRESSION_PATTERN = /\{\{[^{}]+\}\}/g;
+
+const getValidationError = (draft: HttpRequestNodeData) => {
+  const variableName = draft.variableName?.trim() ?? "";
+  if (!variableName) {
+    return "Variable Name is required.";
+  }
+
+  if (!VARIABLE_NAME_PATTERN.test(variableName)) {
+    return "Variable Name must start with a letter or underscore and contain only letters, numbers, and underscores.";
+  }
+
+  if (!HTTP_METHODS.includes(draft.method ?? "GET")) {
+    return "Select a supported HTTP Method.";
+  }
+
+  const endpoint = draft.endpoint?.trim() ?? "";
+  if (!endpoint) {
+    return "Endpoint URL is required.";
+  }
+
+  try {
+    const validationUrl = new URL(
+      endpoint.replace(TEMPLATE_EXPRESSION_PATTERN, "template-value"),
+    );
+
+    if (!["http:", "https:"].includes(validationUrl.protocol)) {
+      return "Endpoint URL must use HTTP or HTTPS.";
+    }
+  } catch {
+    return "Enter a valid Endpoint URL. Workflow variables such as {{variable}} are supported.";
+  }
+
+  return null;
+};
+
 const normalizeEntries = (
   value: unknown,
   fieldName: string,
@@ -133,10 +170,12 @@ export const HttpRequestSettings = ({
   const [draft, setDraft] = useState<HttpRequestNodeData>(() =>
     createDraft(data),
   );
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
       setDraft(createDraft(data));
+      setValidationError(null);
     }
   }, [data, open]);
 
@@ -145,11 +184,27 @@ export const HttpRequestSettings = ({
   const variableExample = draft.variableName?.trim() || "myApiCall";
 
   const updateDraft = (updates: Partial<HttpRequestNodeData>) => {
+    setValidationError(null);
     setDraft((current) => ({ ...current, ...updates }));
   };
 
   const handleSave = () => {
-    updateNodeData(nodeId, draft, { replace: true });
+    const error = getValidationError(draft);
+    if (error) {
+      setValidationError(error);
+      return;
+    }
+
+    updateNodeData(
+      nodeId,
+      {
+        ...draft,
+        variableName: draft.variableName?.trim(),
+        method,
+        endpoint: draft.endpoint?.trim(),
+      },
+      { replace: true },
+    );
     onOpenChange(false);
   };
 
@@ -170,6 +225,14 @@ export const HttpRequestSettings = ({
               className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
             >
               {executionError}
+            </div>
+          )}
+          {validationError && (
+            <div
+              role="alert"
+              className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+            >
+              {validationError}
             </div>
           )}
           <div className="flex flex-col gap-2">
